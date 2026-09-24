@@ -291,7 +291,8 @@ def api_chat():
     except requests.exceptions.Timeout:
         ai_reply = "The AI took too long to respond. Please try again."
 
-    except Exception:
+    except Exception as e:
+        print("GROQ ERROR:", repr(e))
         ai_reply = "Sorry, something went wrong while generating the answer."
 
     history.append({
