@@ -240,7 +240,9 @@ Current user question:
 WAYVO:
 """
 
-    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    key = os.environ.get("GROQ_API_KEY")
+    print("GROQ KEY STATUS:", "SET" if key else "MISSING", "LENGTH:", len(key) if key else 0)
+    client = Groq(api_key=key)
 
     response = client.chat.completions.create(
         model="openai/gpt-oss-20b",
