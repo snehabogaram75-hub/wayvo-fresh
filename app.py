@@ -295,7 +295,7 @@ def api_chat():
 
     except Exception as e:
         print("GROQ ERROR:", repr(e))
-        ai_reply = "Sorry, something went wrong while generating the answer."
+        ai_reply = "GROQ ERROR: " + str(e)
 
     history.append({
         "role": "You",
