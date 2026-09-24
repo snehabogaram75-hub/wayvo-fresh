@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WAYVO Workspace</title>
+
+<style>
+*{box-sizing:border-box}
+
+body{
+    margin:0;
+    min-height:100vh;
+    font-family:Arial,sans-serif;
+    background:linear-gradient(135deg,#FFFDF5 0%,#DCEFF7 45%,#B8D8E8 100%);
+    color:#24343B;
+}
+
+.workspace{
+    min-height:100vh;
+    display:flex;
+}
+
+.sidebar{
+    width:250px;
+    padding:25px 18px;
+    border-right:1px solid rgba(255,255,255,.1);
+    background:rgba(0,0,0,.15);
+}
+
+.logo{
+    font-size:24px;
+    font-weight:800;
+    letter-spacing:2px;
+    margin-bottom:35px;
+}
+
+.new-chat{
+    width:100%;
+    padding:13px;
+    border:1px solid rgba(220,205,184,.8);
+    border-radius:12px;
+    background:rgba(184,216,232,.65);
+    color:#24343B;
+    cursor:pointer;
+    font-size:14px;
+}
+
+.sidebar-title{
+    margin-top:30px;
+    color:#888;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+}
+
+.main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+}
+
+.topbar{
+    height:70px;
+    padding:0 30px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:1px solid rgba(255,255,255,.1);
+}
+
+.workspace-name{
+    font-size:15px;
+    color:#52656D;
+}
+
+.user{
+    font-size:13px;
+    color:#65777E;
+}
+
+.chat{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+    max-width:900px;
+    width:100%;
+    margin:auto;
+    padding:40px 30px 25px;
+}
+
+.welcome{
+    text-align:center;
+    margin:auto;
+}
+
+.welcome h1{
+    font-size:42px;
+    margin-bottom:12px;
+}
+
+.welcome p{
+    color:#65777E;
+    font-size:16px;
+}
+
+.suggestions{
+    display:flex;
+    justify-content:center;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:25px;
+}
+
+.suggestion{
+    padding:10px 15px;
+    border:1px solid rgba(255,255,255,.12);
+    background:rgba(255,255,255,.06);
+    border-radius:50px;
+    color:#52656D;
+    font-size:13px;
+}
+
+.input-area{
+    display:flex;
+    gap:10px;
+    margin-top:30px;
+}
+
+.message-input{
+    flex:1;
+    padding:16px 18px;
+    border-radius:14px;
+    border:1px solid rgba(220,205,184,.8);
+    background:rgba(0,0,0,.25);
+    color:#24343B;
+    outline:none;
+    font-size:15px;
+}
+
+.message-input::placeholder{
+    color:#777;
+}
+
+.send{
+    width:55px;
+    border:none;
+    border-radius:14px;
+    background:#FFFDF5;
+    color:#24343B;
+    font-size:20px;
+    cursor:pointer;
+}
+
+@media(max-width:700px){
+    .sidebar{display:none}
+    .chat{padding:25px 18px}
+    .welcome h1{font-size:32px}
+}
+</style>
+
+<style>
+.chat-messages {
+    width: min(1300px, 97%);
+    margin: 20px auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.message {
+    max-width: 88%;
+    padding: 14px 18px;
+    border-radius: 18px;
+    line-height: 1.5;
+    word-wrap: break-word;
+}
+.message span {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+.user-message {
+    align-self: flex-end;
+    background: #B8D8E8;
+    color: #24343B;
+    border-bottom-right-radius: 5px;
+}
+.ai-message {
+    align-self: flex-start;
+    background: #F1E9DD;
+    color: #303030;
+    border-bottom-left-radius: 5px;
+}
+</style>
+
+<style>
+.chat-history {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.history-item {
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    cursor: default;
+    background: rgba(255,255,255,.45);
+    color: #34444b;
+}
+
+.history-empty {
+    padding: 10px 4px;
+    font-size: 12px;
+    opacity: .6;
+    line-height: 1.4;
+}
+</style>
+</head>
+
+<body>
+
+<div class="workspace">
+
+    <aside class="sidebar">
+        <div class="logo">WAYVO</div>
+
+        <button class="new-chat">＋ New Chat</button>
+
+        <div class="sidebar-title">Chats</div>
+    <div class="chat-history" id="chatHistory">
+        <div class="history-empty">Your conversations will appear here.</div>
+    </div>
+    </aside>
+
+    <main class="main">
+
+        <header class="topbar">
+            <div class="workspace-name">Personal AI Workspace</div>
+            <div class="user">WAYVO</div>
+        </header>
+
+        <section class="chat">
+
+            <div class="welcome">
+                <h1>What can we get done?</h1>
+                <p>Tell WAYVO what you're working on.</p>
+
+                <div id="chatMessages" class="chat-messages"></div><div class="suggestions">
+                    <div class="suggestion">💡 Turn an idea into a plan</div>
+                    <div class="suggestion">🎯 Help me reach a goal</div>
+                    <div class="suggestion">📝 Help me organize something</div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <input
+                    class="message-input"
+                    id="messageInput"
+                    placeholder="What do you want to get done?"
+                >
+                <input type="file" id="photoInput" accept="image/*" style="display:none;">
+<button class="photo" id="photoBtn" type="button" title="Upload photo">📷</button>
+<button class="mic" id="micBtn" type="button" title="Voice input">🎙️</button>
+                <button class="send" id="sendBtn">↑</button>
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<script>
+const messageInput = document.getElementById("messageInput");
+const sendBtn = document.getElementById("sendBtn");
+
+sendBtn.addEventListener("click", async function () {
+    const message = messageInput.value.trim();
+
+    if (!message) return;
+
+    sendBtn.disabled = true;
+    sendBtn.textContent = "...";
+
+    try {
+        const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+            message: message,
+            image: window.selectedImage || null
+        })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            const chatMessages = document.getElementById("chatMessages");
+            const chatHistory = document.getElementById("chatHistory");
+
+            async function loadChatHistory() {
+                const response = await fetch("/api/chats");
+                const data = await response.json();
+
+                if (!data.success) return;
+
+                chatHistory.innerHTML = "";
+
+                if (data.chats.length === 0) {
+                    chatHistory.innerHTML = '<div class="history-empty">Your conversations will appear here.</div>';
+                    return;
+                }
+
+                data.chats.forEach(function(chat) {
+                    const item = document.createElement("div");
+                    item.className = "history-item";
+                    item.textContent = chat.title;
+
+                    item.addEventListener("click", async function() {
+                        const result = await fetch("/api/chats/" + chat.id);
+                        const chatData = await result.json();
+
+                        if (!chatData.success) return;
+
+                        chatMessages.innerHTML = "";
+
+                        chatData.messages.forEach(function(msg) {
+                            const div = document.createElement("div");
+                            div.className = msg.role === "You"
+                                ? "message user-message"
+                                : "message ai-message";
+
+                            const label = document.createElement("span");
+                            label.textContent = msg.role;
+
+                            div.appendChild(label);
+                            div.appendChild(document.createTextNode(msg.content));
+
+                            chatMessages.appendChild(div);
+                        });
+                    });
+
+                    chatHistory.appendChild(item);
+                });
+            }
+
+            loadChatHistory();
+            chatMessages.innerHTML += '<div class="message user-message"><span>You</span>' + message + '</div>';
+
+            const history = document.getElementById("chatHistory");
+            const empty = history.querySelector(".history-empty");
+            if (empty) empty.remove();
+
+            if (!history.querySelector(".history-item")) {
+                history.innerHTML += '<div class="history-item">' + message + '</div>';
+            }
+            chatMessages.innerHTML += '<div class="message ai-message"><span>WAYVO</span>' + data.reply + '</div>';
+            messageInput.value = "";
+        window.selectedImage = null;
+        } else {
+            alert(data.message);
+        }
+    } catch (error) {
+        alert("Something went wrong.");
+    }
+
+    sendBtn.disabled = false;
+    sendBtn.textContent = "↑";
+});
+
+messageInput.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+        sendBtn.click();
+    }
+});
+
+const photoBtn = document.getElementById("photoBtn");
+const photoInput = document.getElementById("photoInput");
+
+photoBtn.addEventListener("click", function () {
+    photoInput.click();
+});
+
+photoInput.addEventListener("change", function () {
+    if (photoInput.files.length > 0) {
+        const file = photoInput.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function () {
+            window.selectedImage = reader.result;
+            messageInput.value = "Photo: " + file.name;
+        };
+
+        reader.readAsDataURL(file);
+    }
+});
+
+const micBtn = document.getElementById("micBtn");
+
+if (micBtn && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    micBtn.addEventListener("click", function () {
+        recognition.start();
+        micBtn.textContent = "🔴";
+    });
+
+    recognition.onresult = function (event) {
+        messageInput.value = event.results[0][0].transcript;
+        micBtn.textContent = "🎙️";
+        sendBtn.click();
+    };
+
+    recognition.onerror = function () {
+        micBtn.textContent = "🎙️";
+    };
+
+    recognition.onend = function () {
+        micBtn.textContent = "🎙️";
+    };
+} else if (micBtn) {
+    micBtn.disabled = true;
+    micBtn.title = "Voice input is not supported by this browser.";
+}
+
+</script>
+\n</body>
+</html>

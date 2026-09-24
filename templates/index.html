@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WAYVO</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:Arial,sans-serif;background:linear-gradient(135deg,#0b0618,#17102f,#24134f);color:white}
+nav{height:70px;display:flex;align-items:center;justify-content:space-between;padding:0 6%;border-bottom:1px solid rgba(255,255,255,.1)}
+.logo{font-size:25px;font-weight:800;letter-spacing:2px}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{color:#bbb;text-decoration:none;font-size:14px}
+.nav-button{background:white;color:#18181b!important;padding:11px 18px;border-radius:9px}
+.hero{min-height:calc(100vh - 70px);display:flex;align-items:center;justify-content:center;padding:70px 6%}
+.hero-content{width:100%;max-width:1100px;display:grid;grid-template-columns:1fr 420px;gap:80px;align-items:center}
+.badge{display:inline-block;padding:8px 13px;border-radius:50px;background:rgba(255,255,255,.1);color:#ccc;font-size:13px;margin-bottom:22px}
+h1{margin:0;font-size:clamp(48px,7vw,82px);line-height:.98;letter-spacing:-4px}
+h1 span{color:#a78bfa}
+.hero-text{margin-top:25px;max-width:570px;font-size:18px;line-height:1.7;color:#b8b5c5}
+.features{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
+.feature{padding:10px 15px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:50px;font-size:13px}
+.card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:22px;padding:32px;box-shadow:0 20px 60px rgba(0,0,0,.3);backdrop-filter:blur(15px)}
+.card h2{margin:0 0 8px;font-size:25px}
+.card p{margin:0 0 25px;color:#aaa7b8;font-size:14px}
+.input{width:100%;padding:15px;margin-bottom:13px;border:1px solid rgba(255,255,255,.15);border-radius:11px;font-size:15px;background:rgba(0,0,0,.2);color:white;outline:none}
+.input::placeholder{color:#888}
+button{width:100%;padding:15px;border:none;border-radius:11px;background:white;color:#18181b;font-size:15px;font-weight:600;cursor:pointer}
+.create{margin-top:10px;background:rgba(255,255,255,.12);color:white}
+.divider{display:flex;align-items:center;gap:10px;margin:20px 0;color:#888;font-size:11px}
+.divider:before,.divider:after{content:"";height:1px;flex:1;background:rgba(255,255,255,.15)}
+.message{text-align:center;min-height:20px;margin-top:15px;font-size:13px;color:#bbb}
+@media(max-width:850px){.hero-content{grid-template-columns:1fr;gap:45px}.nav-links a:not(.nav-button){display:none}.hero{padding:50px 6%}}
+</style>
+</head>
+<body>
+
+<nav>
+<div class="logo">WAYVO</div>
+<div class="nav-links">
+<a href="#">About</a>
+<a href="#">How it works</a>
+<a href="#" class="nav-button">Get started</a>
+</div>
+</nav>
+
+<section class="hero">
+<div class="hero-content">
+
+<section>
+<div class="badge">✦ Your personal AI workspace</div>
+<h1>What can<br><span>we get done?</span></h1>
+<p class="hero-text">WAYVO helps you turn ideas, questions, goals, and everyday problems into things you can actually work on.</p>
+<div class="features">
+<div class="feature">💬 Chat</div>
+<div class="feature">🎯 Goals</div>
+<div class="feature">💡 Ideas</div>
+<div class="feature">🧠 Personal AI</div>
+</div>
+</section>
+
+<section class="card">
+<h2>Welcome to WAYVO</h2>
+<p>Sign in and let's get started.</p>
+
+<input class="input" id="email" type="email" placeholder="Email address">
+<input class="input" id="password" type="password" placeholder="Password">
+
+<button id="loginBtn">Enter WAYVO →</button>
+
+<div class="divider">OR</div>
+
+<button class="create" id="signupBtn">Create Account</button>
+
+<div class="message" id="message"></div>
+</section>
+
+</div>
+</section>
+
+<script>
+const email=document.getElementById("email");
+const password=document.getElementById("password");
+const message=document.getElementById("message");
+
+document.getElementById("signupBtn").addEventListener("click",async()=>{
+if(!email.value.trim()||!password.value){
+message.textContent="Please enter email and password.";
+return;
+}
+message.textContent="Creating your account...";
+try{
+const response=await fetch("/signup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email.value.trim(),password:password.value})});
+const data=await response.json();
+message.textContent=data.success?"Account created! You can login now.":data.message;
+}catch(error){message.textContent="Something went wrong. Try again.";}
+});
+
+document.getElementById("loginBtn").addEventListener("click",async()=>{
+if(!email.value.trim()||!password.value){
+message.textContent="Please enter email and password.";
+return;
+}
+message.textContent="Signing you in...";
+try{
+const response=await fetch("/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email.value.trim(),password:password.value})});
+const data=await response.json();
+if(data.success){window.location.href="/chat";}
+else{message.textContent=data.message;}
+}catch(error){message.textContent="Something went wrong. Try again.";}
+});
+</script>
+
+</body>
+</html>
