@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, redirect, session
 from database import get_db, init_db
 import requests
 import os
+import base64
 from groq import Groq
 
 app = Flask(__name__)
@@ -356,6 +357,145 @@ def api_chat():
 
 
 if __name__ == "__main__":
+    app.run(
+        debug=False,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5050))
+    )
+
+@app.route("/api/chat/image", methods=["POST"])
+def api_chat_image():
+
+    if "user_id" not in session:
+        return jsonify({
+            "success": False,
+            "message": "Please login first."
+        }), 401
+
+    if "image" not in request.files:
+        return jsonify({
+            "success": False,
+            "message": "No image was uploaded."
+        }), 400
+
+    image = request.files["image"]
+
+    if not image.filename:
+        return jsonify({
+            "success": False,
+            "message": "Please select an image."
+        }), 400
+
+    try:
+        image_bytes = image.read()
+
+        if not image_bytes:
+            return jsonify({
+                "success": False,
+                "message": "The uploaded image is empty."
+            }), 400
+
+        base64_image = base64.b64encode(image_bytes).decode("utf-8")
+        mime_type = image.mimetype or "image/jpeg"
+
+        user_message = request.form.get(
+            "message",
+            "Please analyze this image and describe what is inside it."
+        )
+
+        key = os.environ.get("GROQ_API_KEY")
+        client = Groq(api_key=key)
+
+        response = client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": user_message
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0.4,
+            max_completion_tokens=1024
+        )
+
+        ai_reply = response.choices[0].message.content.strip()
+
+        history = session.get("chat_history", [])
+
+        history.append({
+            "role": "You",
+            "content": "Photo: " + image.filename
+        })
+
+        history.append({
+            "role": "WAYVO",
+            "content": ai_reply
+        })
+
+        session["chat_history"] = history[-24:]
+        session.modified = True
+
+        conn = get_db()
+
+        chat_id = session.get("chat_id")
+
+        if not chat_id:
+            cursor = conn.execute(
+                """
+                INSERT INTO chats (user_id, title)
+                VALUES (?, ?)
+                """,
+                (session["user_id"], "Image Chat")
+            )
+
+            chat_id = cursor.lastrowid
+            session["chat_id"] = chat_id
+
+        conn.execute(
+            """
+            INSERT INTO messages (chat_id, role, content)
+            VALUES (?, ?, ?)
+            """,
+            (chat_id, "You", "Photo: " + image.filename)
+        )
+
+        conn.execute(
+            """
+            INSERT INTO messages (chat_id, role, content)
+            VALUES (?, ?, ?)
+            """,
+            (chat_id, "WAYVO", ai_reply)
+        )
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "reply": ai_reply
+        })
+
+    except Exception as e:
+        print("GROQ IMAGE ERROR:", repr(e))
+
+        return jsonify({
+            "success": False,
+            "message": "Could not analyze the image: " + str(e)
+        }), 500
+
+if __name__ == "__main__":
+
     app.run(
         debug=False,
         host="0.0.0.0",
