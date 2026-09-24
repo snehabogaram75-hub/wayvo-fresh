@@ -356,12 +356,6 @@ def api_chat():
     })
 
 
-if __name__ == "__main__":
-    app.run(
-        debug=False,
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 5050))
-    )
 
 @app.route("/api/chat/image", methods=["POST"])
 def api_chat_image():
@@ -496,6 +490,13 @@ def api_chat_image():
 
 if __name__ == "__main__":
 
+    app.run(
+        debug=False,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5050))
+    )
+
+if __name__ == "__main__":
     app.run(
         debug=False,
         host="0.0.0.0",
