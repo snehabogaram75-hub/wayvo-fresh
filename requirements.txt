@@ -2,3 +2,4 @@ Flask
 requests
 groq
 groq
+flask-cors

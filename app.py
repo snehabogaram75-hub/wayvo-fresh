@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, session
+from flask_cors import CORS
 from database import get_db, init_db
 import requests
 import os
@@ -7,6 +8,8 @@ from groq import Groq
 
 app = Flask(__name__)
 app.secret_key = "wayvo-secret-key"
+import re
+CORS(app, supports_credentials=True, origins=re.compile(r"http://localhost:\d+"))
 
 init_db()
 
