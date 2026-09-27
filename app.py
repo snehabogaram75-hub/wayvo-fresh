@@ -8,6 +8,8 @@ from groq import Groq
 
 app = Flask(__name__)
 app.secret_key = "wayvo-secret-key"
+app.config["SESSION_COOKIE_SAMESITE"] = "None"
+app.config["SESSION_COOKIE_SECURE"] = True
 import re
 CORS(app, supports_credentials=True, origins=re.compile(r"http://localhost:\d+"))
 
