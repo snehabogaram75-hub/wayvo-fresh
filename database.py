@@ -1,45 +1,77 @@
-import sqlite3
+import os
+import psycopg2
+import psycopg2.extras
+
+
+class Result:
+    def __init__(self, cur, lastrowid=None):
+        self.cur = cur
+        self.lastrowid = lastrowid
+
+    def fetchone(self):
+        return self.cur.fetchone()
+
+    def fetchall(self):
+        return self.cur.fetchall()
+
+
+class Conn:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def execute(self, sql, params=()):
+        sql = sql.replace("?", "%s")
+        is_chat_insert = sql.strip().upper().startswith("INSERT INTO CHATS")
+        if is_chat_insert:
+            sql = sql.rstrip().rstrip(";") + " RETURNING id"
+        cur = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            cur.execute(sql, params)
+        except Exception:
+            self.conn.rollback()
+            raise
+        lastrowid = cur.fetchone()["id"] if is_chat_insert else None
+        return Result(cur, lastrowid)
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
+
 
 def get_db():
-    conn = sqlite3.connect("wayvo.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+    return Conn(psycopg2.connect(os.environ["DATABASE_URL"]))
+
 
 def init_db():
     conn = get_db()
-
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL
         )
     """)
-
     conn.execute("""
         CREATE TABLE IF NOT EXISTS chats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
             title TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-
     conn.execute("""
         CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            chat_id INTEGER NOT NULL REFERENCES chats(id),
             role TEXT NOT NULL,
             content TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (chat_id) REFERENCES chats(id)
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-
     conn.commit()
     conn.close()
-
-if __name__ == "__main__":
-    init_db()
-    print("WAYVO database created successfully.")

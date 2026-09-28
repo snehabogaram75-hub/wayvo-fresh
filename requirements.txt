@@ -3,3 +3,4 @@ requests
 groq
 groq
 flask-cors
+psycopg2-binary

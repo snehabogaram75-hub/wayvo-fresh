@@ -4,12 +4,14 @@ from database import get_db, init_db
 import requests
 import os
 import base64
+from datetime import timedelta
 from groq import Groq
 
 app = Flask(__name__)
 app.secret_key = "wayvo-secret-key"
 app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["SESSION_COOKIE_SECURE"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 import re
 CORS(app, supports_credentials=True, origins=re.compile(r"http://localhost:\d+"))
 
@@ -76,6 +78,7 @@ def login():
     conn.close()
 
     if user:
+        session.permanent = True
         session["user_id"] = user["id"]
         session["email"] = user["email"]
         session["chat_history"] = []
