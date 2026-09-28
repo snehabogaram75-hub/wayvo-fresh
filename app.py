@@ -13,7 +13,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 import re
-CORS(app, supports_credentials=True, origins=re.compile(r"http://localhost:\d+"))
+CORS(app, supports_credentials=True)
 
 init_db()
 
