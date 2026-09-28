@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 wayvo.db
 *.log
+cookies.txt
+.DS_Store
+*.db
+__pycache__/

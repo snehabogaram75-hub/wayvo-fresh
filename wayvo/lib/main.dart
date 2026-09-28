@@ -1,25 +1,34 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 final Dio dio = Dio(
   BaseOptions(
-    baseUrl: 'http://192.168.0.113:5050',
+    baseUrl: 'https://wayvo-fresh-1.onrender.com',
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 60),
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    extra: {'withCredentials': true},
   ),
 );
 
-final CookieJar cookieJar = CookieJar();
-
-void main() {
-  dio.interceptors.add(CookieManager(cookieJar));
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (const bool.fromEnvironment('dart.library.html') == false) {
+    final dir = await getApplicationDocumentsDirectory();
+    final cookieJar = PersistCookieJar(
+      storage: FileStorage('${dir.path}/.cookies/'),
+    );
+    dio.interceptors.add(CookieManager(cookieJar));
+  }
   runApp(const WayvoApp());
 }
 
@@ -62,6 +71,24 @@ class _AuthScreenState extends State<AuthScreen> {
   bool loading = false;
   String errorMessage = '';
 
+  @override
+  void initState() {
+    super.initState();
+    checkSavedLogin();
+  }
+
+  Future<void> checkSavedLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString("email");
+
+    if (savedEmail != null && mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const WayvoHome()),
+      );
+    }
+  }
+
   Future<void> submit() async {
     final email = emailController.text.trim();
     final password = passwordController.text;
@@ -83,10 +110,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
       final response = await dio.post(
         endpoint,
-        data: jsonEncode({
+        data: {
           'email': email,
           'password': password,
-        }),
+        },
       );
 
       final data = response.data is String
@@ -95,6 +122,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (data['success'] == true) {
         if (isLogin) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString("email", email);
           if (!mounted) return;
 
           Navigator.pushReplacement(
@@ -176,14 +205,13 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'WAYVO',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
+                      Center(
+                        child: SvgPicture.asset(
+                          'assets/wayvo-icon.svg',
+                          height: 72,
                         ),
                       ),
 
@@ -257,12 +285,14 @@ class _AuthScreenState extends State<AuthScreen> {
                         width: double.infinity,
                         height: 52,
                         child: ElevatedButton(
-                          onPressed: loading ? null : submit,
+                          onPressed:
+                              loading ? null : submit,
                           style: ElevatedButton.styleFrom(
                             backgroundColor:
                                 const Color(0xFF17152A),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
+                            shape:
+                                RoundedRectangleBorder(
                               borderRadius:
                                   BorderRadius.circular(14),
                             ),
@@ -283,7 +313,8 @@ class _AuthScreenState extends State<AuthScreen> {
                                       : 'Create Account',
                                   style: const TextStyle(
                                     fontSize: 16,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight:
+                                        FontWeight.w600,
                                   ),
                                 ),
                         ),
@@ -321,7 +352,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================
-// WAYVO CHAT
+// WAYVO HOME
 // =========================
 
 class WayvoHome extends StatefulWidget {
@@ -334,18 +365,88 @@ class WayvoHome extends StatefulWidget {
 class _WayvoHomeState extends State<WayvoHome> {
   final messageController = TextEditingController();
 
-  // NEW: controls chat scrolling
   final ScrollController scrollController =
       ScrollController();
 
+  final ImagePicker imagePicker = ImagePicker();
+
+  final stt.SpeechToText speechToText =
+      stt.SpeechToText();
+
   final List<Map<String, String>> messages = [];
+
+  List<dynamic> chatList = [];
+  int? currentChatId;
 
   bool sending = false;
   bool historyOpen = false;
+  bool listening = false;
 
-  // =========================
-  // NEW: SCROLL TO BOTTOM
-  // =========================
+  @override
+  void initState() {
+    super.initState();
+    loadChats();
+  }
+
+  Future<void> loadChats() async {
+    try {
+      final response = await dio.get('/api/chats');
+      final data = response.data is String
+          ? jsonDecode(response.data)
+          : response.data;
+
+      if (mounted && data['success'] == false) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('email');
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AuthScreen()),
+        );
+        return;
+      }
+
+      if (data['success'] == true && mounted) {
+        setState(() {
+          chatList = data['chats'] ?? [];
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  Future<void> openChat(int chatId) async {
+    try {
+      final response = await dio.get('/api/chats/$chatId');
+      final data = response.data is String
+          ? jsonDecode(response.data)
+          : response.data;
+
+      if (data['success'] == true && mounted) {
+        setState(() {
+          currentChatId = chatId;
+          messages.clear();
+          for (final m in data['messages']) {
+            messages.add({
+              'role': m['role'].toString(),
+              'content': m['content'].toString(),
+            });
+          }
+        });
+
+        scrollToBottom();
+
+        if (MediaQuery.of(context).size.width < 800) {
+          setState(() {
+            historyOpen = false;
+          });
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
 
   void scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -358,6 +459,10 @@ class _WayvoHomeState extends State<WayvoHome> {
       );
     });
   }
+
+  // =========================
+  // SEND TEXT MESSAGE
+  // =========================
 
   Future<void> sendMessage() async {
     final message = messageController.text.trim();
@@ -374,7 +479,6 @@ class _WayvoHomeState extends State<WayvoHome> {
       messageController.clear();
     });
 
-    // NEW: immediately show latest user message
     scrollToBottom();
 
     try {
@@ -382,7 +486,11 @@ class _WayvoHomeState extends State<WayvoHome> {
         '/api/chat',
         data: {
           'message': message,
+          'chat_id': currentChatId,
         },
+        options: Options(
+          contentType: Headers.jsonContentType,
+        ),
       );
 
       final data = response.data is String
@@ -391,18 +499,8 @@ class _WayvoHomeState extends State<WayvoHome> {
 
       if (!mounted) return;
 
-      if (response.statusCode == 401) {
-        setState(() {
-          messages.add({
-            'role': 'WAYVO',
-            'content': 'Please login first.',
-          });
-        });
-
-        return;
-      }
-
       setState(() {
+        currentChatId = data['chat_id'] ?? currentChatId;
         messages.add({
           'role': 'WAYVO',
           'content': data['reply'] ??
@@ -410,27 +508,18 @@ class _WayvoHomeState extends State<WayvoHome> {
         });
       });
 
-      // NEW: scroll after WAYVO reply
+      scrollToBottom();
+      loadChats();
     } on DioException catch (e) {
       if (!mounted) return;
 
-      if (e.response?.statusCode == 401) {
-        setState(() {
-          messages.add({
-            'role': 'WAYVO',
-            'content': 'Please login again.',
-          });
+      setState(() {
+        messages.add({
+          'role': 'WAYVO',
+          'content': e.response?.data?['message'] ??
+              'Could not connect to WAYVO backend.',
         });
-      } else {
-        setState(() {
-          messages.add({
-            'role': 'WAYVO',
-            'content':
-                'Could not connect to WAYVO backend.',
-          });
-        });
-      }
-
+      });
     } catch (e) {
       if (!mounted) return;
 
@@ -441,14 +530,160 @@ class _WayvoHomeState extends State<WayvoHome> {
               'Something went wrong. Please try again.',
         });
       });
-
     } finally {
       if (mounted) {
         setState(() {
           sending = false;
         });
+      }
+    }
+  }
 
+  // =========================
+  // MICROPHONE
+  // =========================
 
+  Future<void> toggleMicrophone() async {
+    if (listening) {
+      await speechToText.stop();
+
+      if (mounted) {
+        setState(() {
+          listening = false;
+        });
+      }
+
+      return;
+    }
+
+    final available =
+        await speechToText.initialize();
+
+    if (!available) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Speech recognition is not available.'),
+        ),
+      );
+
+      return;
+    }
+
+    setState(() {
+      listening = true;
+    });
+
+    await speechToText.listen(
+      onResult: (result) {
+        if (!mounted) return;
+
+        setState(() {
+          messageController.text =
+              result.recognizedWords;
+
+          messageController.selection =
+              TextSelection.fromPosition(
+            TextPosition(
+              offset: messageController.text.length,
+            ),
+          );
+        });
+      },
+    );
+  }
+
+  // =========================
+  // PHOTO
+  // =========================
+
+  Future<void> pickPhoto() async {
+    if (sending) return;
+
+    final XFile? image =
+        await imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+
+    if (image == null) return;
+
+    final file = File(image.path);
+
+    setState(() {
+      messages.add({
+        'role': 'You',
+        'content': 'Photo: ${image.name}',
+      });
+
+      sending = true;
+    });
+
+    scrollToBottom();
+
+    try {
+      final formData = FormData.fromMap({
+        'image': await MultipartFile.fromFile(
+          file.path,
+          filename: image.name,
+        ),
+        'message':
+            'Please analyze this image and describe what is inside it.',
+        'chat_id': (currentChatId ?? '').toString(),
+      });
+
+      final response = await dio.post(
+        '/api/chat/image',
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      final data = response.data is String
+          ? jsonDecode(response.data)
+          : response.data;
+
+      if (!mounted) return;
+
+      setState(() {
+        currentChatId = data['chat_id'] ?? currentChatId;
+        messages.add({
+          'role': 'WAYVO',
+          'content': data['reply'] ??
+              'I could not analyze the image.',
+        });
+      });
+
+      scrollToBottom();
+      loadChats();
+    } on DioException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        messages.add({
+          'role': 'WAYVO',
+          'content': e.response?.data?['message'] ??
+              'Could not analyze the image.',
+        });
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        messages.add({
+          'role': 'WAYVO',
+          'content':
+              'Something went wrong while analyzing the image.',
+        });
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          sending = false;
+        });
       }
     }
   }
@@ -456,6 +691,7 @@ class _WayvoHomeState extends State<WayvoHome> {
   void startNewChat() {
     setState(() {
       messages.clear();
+      currentChatId = null;
     });
 
     if (MediaQuery.of(context).size.width < 800) {
@@ -469,6 +705,7 @@ class _WayvoHomeState extends State<WayvoHome> {
   void dispose() {
     messageController.dispose();
     scrollController.dispose();
+    speechToText.stop();
     super.dispose();
   }
 
@@ -478,14 +715,14 @@ class _WayvoHomeState extends State<WayvoHome> {
     final isMobile = width < 800;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F7F2),
+      backgroundColor:
+          const Color(0xFFF8F7F2),
       body: SafeArea(
         child: Stack(
           children: [
             Row(
               children: [
                 if (!isMobile) buildSidebar(),
-
                 Expanded(
                   child: buildChatArea(isMobile),
                 ),
@@ -569,16 +806,33 @@ class _WayvoHomeState extends State<WayvoHome> {
 
           const SizedBox(height: 12),
 
-          const Padding(
-            padding:
-                EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              'Your conversations will appear here.',
-              style: TextStyle(
-                color: Colors.white38,
-                fontSize: 13,
-              ),
-            ),
+          Expanded(
+            child: chatList.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'Your conversations will appear here.',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: chatList.length,
+                    itemBuilder: (context, index) {
+                      final c = chatList[index];
+                      final isActive = c['id'] == currentChatId;
+                      return ListTile(
+                        selected: isActive,
+                        selectedTileColor: Colors.white12,
+                        title: Text(
+                          c['title'] ?? 'Chat',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                        onTap: () => openChat(c['id']),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -670,17 +924,34 @@ class _WayvoHomeState extends State<WayvoHome> {
 
             const SizedBox(height: 12),
 
-            const Padding(
-              padding:
-                  EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'Your conversations will appear here.',
-                style: TextStyle(
-                  color: Colors.white38,
-                  fontSize: 13,
-                ),
-              ),
-            ),
+            Expanded(
+            child: chatList.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'Your conversations will appear here.',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: chatList.length,
+                    itemBuilder: (context, index) {
+                      final c = chatList[index];
+                      final isActive = c['id'] == currentChatId;
+                      return ListTile(
+                        selected: isActive,
+                        selectedTileColor: Colors.white12,
+                        title: Text(
+                          c['title'] ?? 'Chat',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                        onTap: () => openChat(c['id']),
+                      );
+                    },
+                  ),
+          ),
           ],
         ),
       ),
@@ -810,25 +1081,32 @@ class _WayvoHomeState extends State<WayvoHome> {
 
   Widget buildMessages() {
     return SingleChildScrollView(
+      controller: scrollController,
       padding: const EdgeInsets.all(24),
       physics: const BouncingScrollPhysics(),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment:
+            CrossAxisAlignment.stretch,
         children: List.generate(
           messages.length,
           (index) {
             final message = messages[index];
-            final isUser = message['role'] == 'You';
+            final isUser =
+                message['role'] == 'You';
 
             return Align(
-              alignment:
-                  isUser ? Alignment.centerRight : Alignment.centerLeft,
+              alignment: isUser
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
               child: Container(
-                constraints: const BoxConstraints(
+                constraints:
+                    const BoxConstraints(
                   maxWidth: 650,
                 ),
-                margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.symmetric(
+                margin:
+                    const EdgeInsets.only(bottom: 14),
+                padding:
+                    const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
                 ),
@@ -836,7 +1114,8 @@ class _WayvoHomeState extends State<WayvoHome> {
                   color: isUser
                       ? const Color(0xFF17152A)
                       : Colors.white,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius:
+                      BorderRadius.circular(18),
                   border: Border.all(
                     color: isUser
                         ? Colors.transparent
@@ -844,13 +1123,15 @@ class _WayvoHomeState extends State<WayvoHome> {
                   ),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
                       message['role'] ?? '',
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                         color: isUser
                             ? Colors.white60
                             : Colors.black45,
@@ -909,7 +1190,8 @@ class _WayvoHomeState extends State<WayvoHome> {
                     sendMessage();
                   }
                 },
-                decoration: const InputDecoration(
+                decoration:
+                    const InputDecoration(
                   hintText:
                       'What do you want to get done?',
                   border: InputBorder.none,
@@ -923,17 +1205,24 @@ class _WayvoHomeState extends State<WayvoHome> {
             ),
           ),
 
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
 
           IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.mic_none,
+            onPressed:
+                sending ? null : toggleMicrophone,
+            icon: Icon(
+              listening
+                  ? Icons.mic
+                  : Icons.mic_none,
+              color: listening
+                  ? Colors.red
+                  : Colors.black87,
             ),
           ),
 
           IconButton(
-            onPressed: () {},
+            onPressed:
+                sending ? null : pickPhoto,
             icon: const Icon(
               Icons.photo_camera_outlined,
             ),
