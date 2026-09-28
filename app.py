@@ -272,6 +272,40 @@ WAYVO:
     return response.choices[0].message.content.strip()
 
 
+def sync_chat(requested_id):
+    try:
+        requested_id = int(requested_id) if requested_id not in (None, "") else None
+    except (TypeError, ValueError):
+        requested_id = None
+
+    if requested_id == session.get("chat_id"):
+        return
+
+    history = []
+
+    if requested_id is not None:
+        c = get_db()
+        owned = c.execute(
+            "SELECT id FROM chats WHERE id = ? AND user_id = ?",
+            (requested_id, session["user_id"])
+        ).fetchone()
+
+        if owned:
+            rows = c.execute(
+                "SELECT role, content FROM messages WHERE chat_id = ? ORDER BY id DESC LIMIT 12",
+                (requested_id,)
+            ).fetchall()
+            history = [dict(r) for r in reversed(rows)]
+        else:
+            requested_id = None
+
+        c.close()
+
+    session["chat_id"] = requested_id
+    session["chat_history"] = history
+    session.modified = True
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
 
@@ -290,6 +324,8 @@ def api_chat():
             "success": False,
             "message": "Please enter a message."
         }), 400
+
+    sync_chat(data.get("chat_id"))
 
     history = session.get("chat_history", [])
 
@@ -360,7 +396,8 @@ def api_chat():
 
     return jsonify({
         "success": True,
-        "reply": ai_reply
+        "reply": ai_reply,
+        "chat_id": chat_id
     })
 
 
@@ -433,6 +470,8 @@ def api_chat_image():
 
         ai_reply = response.choices[0].message.content.strip()
 
+        sync_chat(request.form.get("chat_id"))
+
         history = session.get("chat_history", [])
 
         history.append({
@@ -485,7 +524,8 @@ def api_chat_image():
 
         return jsonify({
             "success": True,
-            "reply": ai_reply
+            "reply": ai_reply,
+            "chat_id": chat_id
         })
 
     except Exception as e:
