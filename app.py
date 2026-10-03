@@ -11,6 +11,7 @@ from groq import Groq
 from tavily import TavilyClient
 from pypdf import PdfReader
 from docx import Document
+from pptx import Presentation
 from openpyxl import load_workbook
 import pandas as pd
 
@@ -20,12 +21,25 @@ app = Flask(__name__)
 def extract_document_text(file):
     filename = (file.filename or "").lower()
     ext = os.path.splitext(filename)[1]
+
     if ext == ".pdf":
         reader = PdfReader(file.stream)
         return "\n".join((page.extract_text() or "") for page in reader.pages)
+
     if ext == ".docx":
         doc = Document(file.stream)
         return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+    if ext == ".pptx":
+        presentation = Presentation(file.stream)
+        parts = []
+        for slide_number, slide in enumerate(presentation.slides, start=1):
+            parts.append(f"Slide: {slide_number}")
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text.strip():
+                    parts.append(shape.text)
+        return "\n".join(parts)
+
     if ext in [".xlsx", ".xls"]:
         data = pd.read_excel(file.stream, sheet_name=None)
         parts = []
@@ -33,11 +47,14 @@ def extract_document_text(file):
             parts.append(f"Sheet: {sheet}")
             parts.append(df.fillna("").to_string(index=False))
         return "\n".join(parts)
+
     if ext == ".csv":
         df = pd.read_csv(file.stream)
         return df.fillna("").to_string(index=False)
-    if ext == ".txt":
+
+    if ext in [".txt", ".md", ".json", ".xml"]:
         return file.read().decode("utf-8", errors="replace")
+
     raise ValueError("Unsupported document type.")
 
 app.secret_key = "wayvo-secret-key"
@@ -465,7 +482,7 @@ def api_chat_document():
         document_text = extract_document_text(uploaded_file).strip()
         if not document_text:
             return jsonify({"success": False, "message": "The document appears to be empty or unreadable."}), 400
-        document_text = document_text[:30000]
+        document_text = document_text[:18000]
         user_message = request.form.get("message", "Please analyze this document and summarize the important information.")
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         response = client.chat.completions.create(
