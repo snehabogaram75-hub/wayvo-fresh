@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import base64
 from datetime import timedelta
+import concurrent.futures
 from groq import Groq
 from tavily import TavilyClient
 from pypdf import PdfReader
@@ -504,9 +505,8 @@ def api_chat_document():
             for i in range(0, len(document_text), chunk_size)
         ]
 
-        summaries = []
-
-        for index, chunk in enumerate(chunks, start=1):
+        def summarize_chunk(args):
+            index, chunk = args
             response = client.chat.completions.create(
                 model="qwen/qwen3.8-27b",
                 messages=[{
@@ -521,10 +521,14 @@ def api_chat_document():
                 temperature=0.3,
                 max_completion_tokens=500
             )
+            return index, response.choices[0].message.content.strip()
 
-            summaries.append(response.choices[0].message.content.strip())
+        results = [None] * len(chunks)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            for index, summary in executor.map(summarize_chunk, enumerate(chunks, start=1)):
+                results[index - 1] = summary
 
-        combined_summary = "\\n\\n".join(summaries)
+        combined_summary = "\\n\\n".join(results)
 
         final_response = client.chat.completions.create(
             model="qwen/qwen3.8-27b",
