@@ -4,3 +4,12 @@ groq
 groq
 flask-cors
 psycopg2-binary
+
+tavily-python
+
+python-dotenv
+
+pypdf
+python-docx
+openpyxl
+pandas

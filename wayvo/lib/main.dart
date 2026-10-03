@@ -7,6 +7,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
@@ -598,13 +599,165 @@ class _WayvoHomeState extends State<WayvoHome> {
   // =========================
   // PHOTO
   // =========================
+  Future<void> chooseAttachmentSource() async {
+    if (sending) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Photo'),
+                onTap: () => Navigator.pop(context, 'photo'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: const Text('Document'),
+                onTap: () => Navigator.pop(context, 'document'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (choice == 'photo') {
+      await choosePhotoSource();
+    } else if (choice == 'document') {
+      await pickDocument();
+    }
+  }
 
-  Future<void> pickPhoto() async {
+  Future<void> choosePhotoSource() async {
+    if (sending) return;
+
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(20),
+        ),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.pop(
+                  context,
+                  ImageSource.camera,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from Gallery'),
+                onTap: () => Navigator.pop(
+                  context,
+                  ImageSource.gallery,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (source != null) {
+      await pickPhoto(source: source);
+    }
+  }
+
+
+  Future<void> pickDocument() async {
+    if (sending) return;
+
+    final result = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: [
+        'pdf',
+        'doc',
+        'docx',
+        'xls',
+        'xlsx',
+        'csv',
+        'txt',
+      ],
+    );
+
+    if (result == null || result.path == null) return;
+
+    final pickedFile = result;
+    final file = File(pickedFile.path!);
+
+    setState(() {
+      messages.add({
+        'role': 'You',
+        'content': 'Document: ${pickedFile.name}',
+      });
+      sending = true;
+    });
+
+    scrollToBottom();
+
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          file.path,
+          filename: pickedFile.name,
+        ),
+        'message':
+            'Please analyze this document and summarize the important information.',
+        'chat_id': (currentChatId ?? '').toString(),
+      });
+
+      final response = await dio.post(
+        '/api/chat/document',
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
+      );
+
+      final reply = response.data['response']?.toString() ??
+          'I could not analyze this document.';
+
+      setState(() {
+        messages.add({
+          'role': 'WAYVO',
+          'content': reply,
+        });
+      });
+    } catch (e) {
+      setState(() {
+        messages.add({
+          'role': 'WAYVO',
+          'content': 'Sorry, I could not process this document.',
+        });
+      });
+    } finally {
+      setState(() {
+        sending = false;
+      });
+      scrollToBottom();
+    }
+  }
+
+  Future<void> pickPhoto({ImageSource source = ImageSource.gallery}) async {
     if (sending) return;
 
     final XFile? image =
         await imagePicker.pickImage(
-      source: ImageSource.gallery,
+      source: source,
       imageQuality: 85,
     );
 
@@ -1222,7 +1375,7 @@ class _WayvoHomeState extends State<WayvoHome> {
 
           IconButton(
             onPressed:
-                sending ? null : pickPhoto,
+                sending ? null : chooseAttachmentSource,
             icon: const Icon(
               Icons.photo_camera_outlined,
             ),

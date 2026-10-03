@@ -3,11 +3,43 @@ from flask_cors import CORS
 from database import get_db, init_db
 import requests
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import base64
 from datetime import timedelta
 from groq import Groq
+from tavily import TavilyClient
+from pypdf import PdfReader
+from docx import Document
+from openpyxl import load_workbook
+import pandas as pd
 
 app = Flask(__name__)
+
+
+def extract_document_text(file):
+    filename = (file.filename or "").lower()
+    ext = os.path.splitext(filename)[1]
+    if ext == ".pdf":
+        reader = PdfReader(file.stream)
+        return "\n".join((page.extract_text() or "") for page in reader.pages)
+    if ext == ".docx":
+        doc = Document(file.stream)
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    if ext in [".xlsx", ".xls"]:
+        data = pd.read_excel(file.stream, sheet_name=None)
+        parts = []
+        for sheet, df in data.items():
+            parts.append(f"Sheet: {sheet}")
+            parts.append(df.fillna("").to_string(index=False))
+        return "\n".join(parts)
+    if ext == ".csv":
+        df = pd.read_csv(file.stream)
+        return df.fillna("").to_string(index=False)
+    if ext == ".txt":
+        return file.read().decode("utf-8", errors="replace")
+    raise ValueError("Unsupported document type.")
+
 app.secret_key = "wayvo-secret-key"
 app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["SESSION_COOKIE_SECURE"] = True
@@ -209,6 +241,21 @@ def chat():
     return render_template("chat.html")
 
 
+def web_search(query):
+    key = os.environ.get("TAVILY_API_KEY")
+    if not key:
+        return ""
+    client = TavilyClient(api_key=key)
+    results = client.search(query=query, search_depth="advanced", max_results=5)
+    lines = []
+    for r in results.get("results", []):
+        title = r.get("title", "")
+        content = r.get("content", "")
+        url = r.get("url", "")
+        lines.append(f"Title: {title} | Content: {content} | URL: {url}")
+    return "\n\n".join(lines)
+
+
 def ask_ollama(message, history):
     conversation = ""
 
@@ -404,6 +451,64 @@ def api_chat():
     })
 
 
+
+@app.route("/api/chat/document", methods=["POST"])
+def api_chat_document():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No document was uploaded."}), 400
+    uploaded_file = request.files["file"]
+    if not uploaded_file.filename:
+        return jsonify({"success": False, "message": "Please select a document."}), 400
+    try:
+        document_text = extract_document_text(uploaded_file).strip()
+        if not document_text:
+            return jsonify({"success": False, "message": "The document appears to be empty or unreadable."}), 400
+        document_text = document_text[:30000]
+        user_message = request.form.get("message", "Please analyze this document and summarize the important information.")
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        response = client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=[{
+                "role": "user",
+                "content": user_message + "\n\nDocument content:\n" + document_text
+            }],
+            temperature=0.4,
+            max_completion_tokens=1024
+        )
+        ai_reply = response.choices[0].message.content.strip()
+        sync_chat(request.form.get("chat_id"))
+        history = session.get("chat_history", [])
+        history.append({"role": "You", "content": "Document: " + uploaded_file.filename})
+        history.append({"role": "WAYVO", "content": ai_reply})
+        session["chat_history"] = history[-24:]
+        session.modified = True
+        conn = get_db()
+        chat_id = session.get("chat_id")
+        if not chat_id:
+            cursor = conn.execute(
+                "INSERT INTO chats (user_id, title) VALUES (?, ?)",
+                (session["user_id"], "Document Chat")
+            )
+            chat_id = cursor.lastrowid
+            session["chat_id"] = chat_id
+        conn.execute(
+            "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+            (chat_id, "You", "Document: " + uploaded_file.filename)
+        )
+        conn.execute(
+            "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+            (chat_id, "WAYVO", ai_reply)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "reply": ai_reply, "chat_id": chat_id})
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+    except Exception as e:
+        print("GROQ DOCUMENT ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not analyze the document: " + str(e)}), 500
 
 @app.route("/api/chat/image", methods=["POST"])
 def api_chat_image():

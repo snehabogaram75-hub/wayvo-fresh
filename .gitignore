@@ -6,3 +6,7 @@ cookies.txt
 .DS_Store
 *.db
 __pycache__/
+
+.env
+.env.*
+!.env.example
