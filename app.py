@@ -473,36 +473,92 @@ def api_chat():
 def api_chat_document():
     if "user_id" not in session:
         return jsonify({"success": False, "message": "Please login first."}), 401
+
     if "file" not in request.files:
         return jsonify({"success": False, "message": "No document was uploaded."}), 400
+
     uploaded_file = request.files["file"]
+
     if not uploaded_file.filename:
         return jsonify({"success": False, "message": "Please select a document."}), 400
+
     try:
         document_text = extract_document_text(uploaded_file).strip()
+
         if not document_text:
-            return jsonify({"success": False, "message": "The document appears to be empty or unreadable."}), 400
-        document_text = document_text[:18000]
-        user_message = request.form.get("message", "Please analyze this document and summarize the important information.")
+            return jsonify({
+                "success": False,
+                "message": "The document appears to be empty or unreadable."
+            }), 400
+
+        user_message = request.form.get(
+            "message",
+            "Please analyze this document and summarize the important information."
+        )
+
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-        response = client.chat.completions.create(
+
+        chunk_size = 8000
+        chunks = [
+            document_text[i:i + chunk_size]
+            for i in range(0, len(document_text), chunk_size)
+        ]
+
+        summaries = []
+
+        for index, chunk in enumerate(chunks, start=1):
+            response = client.chat.completions.create(
+                model="qwen/qwen3.8-27b",
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"This is part {index} of {len(chunks)} of a document. "
+                        "Extract the important facts, numbers, tables, and key points. "
+                        "Be concise.\\n\\n"
+                        + chunk
+                    )
+                }],
+                temperature=0.3,
+                max_completion_tokens=500
+            )
+
+            summaries.append(response.choices[0].message.content.strip())
+
+        combined_summary = "\\n\\n".join(summaries)
+
+        final_response = client.chat.completions.create(
             model="qwen/qwen3.8-27b",
             messages=[{
                 "role": "user",
-                "content": user_message + "\n\nDocument content:\n" + document_text
+                "content": (
+                    user_message
+                    + "\\n\\nDocument section summaries:\\n\\n"
+                    + combined_summary
+                )
             }],
-            temperature=0.4,
-            max_completion_tokens=1024
+            temperature=0.3,
+            max_completion_tokens=700
         )
-        ai_reply = response.choices[0].message.content.strip()
+
+        ai_reply = final_response.choices[0].message.content.strip()
+
         sync_chat(request.form.get("chat_id"))
+
         history = session.get("chat_history", [])
-        history.append({"role": "You", "content": "Document: " + uploaded_file.filename})
-        history.append({"role": "WAYVO", "content": ai_reply})
+        history.append({
+            "role": "You",
+            "content": "Document: " + uploaded_file.filename
+        })
+        history.append({
+            "role": "WAYVO",
+            "content": ai_reply
+        })
         session["chat_history"] = history[-24:]
         session.modified = True
+
         conn = get_db()
         chat_id = session.get("chat_id")
+
         if not chat_id:
             cursor = conn.execute(
                 "INSERT INTO chats (user_id, title) VALUES (?, ?)",
@@ -510,6 +566,7 @@ def api_chat_document():
             )
             chat_id = cursor.lastrowid
             session["chat_id"] = chat_id
+
         conn.execute(
             "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
             (chat_id, "You", "Document: " + uploaded_file.filename)
@@ -518,14 +575,25 @@ def api_chat_document():
             "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
             (chat_id, "WAYVO", ai_reply)
         )
+
         conn.commit()
         conn.close()
-        return jsonify({"success": True, "reply": ai_reply, "chat_id": chat_id})
+
+        return jsonify({
+            "success": True,
+            "reply": ai_reply,
+            "chat_id": chat_id
+        })
+
     except ValueError as e:
         return jsonify({"success": False, "message": str(e)}), 400
+
     except Exception as e:
         print("GROQ DOCUMENT ERROR:", repr(e))
-        return jsonify({"success": False, "message": "Could not analyze the document: " + str(e)}), 500
+        return jsonify({
+            "success": False,
+            "message": "Could not analyze the document: " + str(e)
+        }), 500
 
 @app.route("/api/chat/image", methods=["POST"])
 def api_chat_image():
