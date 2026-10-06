@@ -250,6 +250,48 @@ def new_chat():
     })
 
 
+@app.route("/api/chats/<int:chat_id>", methods=["DELETE"])
+def delete_chat(chat_id):
+
+    if "user_id" not in session:
+        return jsonify({
+            "success": False
+        }), 401
+
+    conn = get_db()
+
+    chat = conn.execute(
+        "SELECT id FROM chats WHERE id = ? AND user_id = ?",
+        (chat_id, session["user_id"])
+    ).fetchone()
+
+    if not chat:
+        conn.close()
+        return jsonify({
+            "success": False,
+            "message": "Chat not found"
+        }), 404
+
+    conn.execute(
+        "DELETE FROM messages WHERE chat_id = ?",
+        (chat_id,)
+    )
+    conn.execute(
+        "DELETE FROM chats WHERE id = ? AND user_id = ?",
+        (chat_id, session["user_id"])
+    )
+    conn.commit()
+    conn.close()
+
+    if session.get("chat_id") == chat_id:
+        session.pop("chat_id", None)
+        session["chat_history"] = []
+
+    return jsonify({
+        "success": True
+    })
+
+
 @app.route("/chat")
 def chat():
 
