@@ -156,7 +156,7 @@ def get_chats():
 
     chats = conn.execute(
         """
-        SELECT id, title, created_at, pinned, archived
+        SELECT id, title, created_at, pinned, archived, locked
         FROM chats
         WHERE user_id = ?
         ORDER BY pinned DESC, id DESC
@@ -314,6 +314,11 @@ def _toggle_chat_flag(chat_id, column):
 @app.route("/api/chats/<int:chat_id>/pin", methods=["POST"])
 def pin_chat(chat_id):
     return _toggle_chat_flag(chat_id, "pinned")
+
+
+@app.route("/api/chats/<int:chat_id>/lock", methods=["POST"])
+def lock_chat(chat_id):
+    return _toggle_chat_flag(chat_id, "locked")
 
 
 @app.route("/api/chats/<int:chat_id>/archive", methods=["POST"])
