@@ -68,6 +68,20 @@ def init_db():
     conn.execute("ALTER TABLE chats ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE")
     conn.execute("ALTER TABLE chats ADD COLUMN IF NOT EXISTS locked BOOLEAN NOT NULL DEFAULT FALSE")
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS one_time_items (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            chat_id INTEGER,
+            kind TEXT NOT NULL,
+            filename TEXT DEFAULT '',
+            mime TEXT DEFAULT '',
+            content_text TEXT,
+            data BYTEA,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            viewed_at TIMESTAMP
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id SERIAL PRIMARY KEY,
             chat_id INTEGER NOT NULL REFERENCES chats(id),

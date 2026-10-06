@@ -277,6 +277,10 @@ def delete_chat(chat_id):
         (chat_id,)
     )
     conn.execute(
+        "DELETE FROM one_time_items WHERE chat_id = ? AND user_id = ?",
+        (chat_id, session["user_id"])
+    )
+    conn.execute(
         "DELETE FROM chats WHERE id = ? AND user_id = ?",
         (chat_id, session["user_id"])
     )
@@ -324,6 +328,136 @@ def lock_chat(chat_id):
 @app.route("/api/chats/<int:chat_id>/archive", methods=["POST"])
 def archive_chat(chat_id):
     return _toggle_chat_flag(chat_id, "archived")
+
+
+MAX_ONETIME_BYTES = 5 * 1024 * 1024
+
+
+@app.route("/api/onetime", methods=["POST"])
+def create_onetime():
+    import psycopg2
+
+    if "user_id" not in session:
+        return jsonify({"success": False}), 401
+
+    kind = request.form.get("kind", "text")
+    if kind not in ("text", "image", "file"):
+        return jsonify({"success": False, "message": "Invalid type"}), 400
+
+    text = request.form.get("text", "")
+    filename = ""
+    mime = ""
+    blob = None
+
+    if kind == "text":
+        if not text.strip():
+            return jsonify({"success": False, "message": "Empty message"}), 400
+    else:
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"success": False, "message": "No file"}), 400
+        blob = f.read()
+        if len(blob) > MAX_ONETIME_BYTES:
+            return jsonify({"success": False, "message": "File too large (max 5 MB)"}), 413
+        filename = (f.filename or "file")[:120].replace(":", "_")
+        mime = f.mimetype or "application/octet-stream"
+
+    conn = get_db()
+
+    chat_id = request.form.get("chat_id", type=int)
+    if chat_id:
+        owned = conn.execute(
+            "SELECT id FROM chats WHERE id = ? AND user_id = ?",
+            (chat_id, session["user_id"])
+        ).fetchone()
+        if not owned:
+            chat_id = None
+
+    if not chat_id:
+        cursor = conn.execute(
+            "INSERT INTO chats (user_id, title) VALUES (?, ?)",
+            (session["user_id"], "One-time item")
+        )
+        chat_id = cursor.lastrowid
+        session["chat_id"] = chat_id
+        session["chat_history"] = []
+
+    item = conn.execute(
+        "INSERT INTO one_time_items (user_id, chat_id, kind, filename, mime, content_text, data) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (
+            session["user_id"], chat_id, kind, filename, mime,
+            text if kind == "text" else None,
+            psycopg2.Binary(blob) if blob is not None else None,
+        )
+    ).fetchone()
+    item_id = item["id"]
+
+    marker = "[[ONETIME:" + str(item_id) + ":" + kind + ":" + filename + "]]"
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "You", marker)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "success": True,
+        "chat_id": chat_id,
+        "item_id": item_id,
+        "content": marker
+    })
+
+
+@app.route("/api/onetime/<int:item_id>/view", methods=["POST"])
+def view_onetime(item_id):
+    if "user_id" not in session:
+        return jsonify({"success": False}), 401
+
+    conn = get_db()
+
+    row = conn.execute(
+        "SELECT id, chat_id, kind, filename, mime, content_text, data "
+        "FROM one_time_items "
+        "WHERE id = ? AND user_id = ? AND viewed_at IS NULL FOR UPDATE",
+        (item_id, session["user_id"])
+    ).fetchone()
+
+    if not row:
+        conn.rollback()
+        conn.close()
+        return jsonify({
+            "success": False,
+            "message": "Already opened or not available"
+        }), 410
+
+    payload = {
+        "success": True,
+        "kind": row["kind"],
+        "filename": row["filename"],
+        "mime": row["mime"],
+        "text": row["content_text"],
+        "data_b64": base64.b64encode(bytes(row["data"])).decode("ascii")
+        if row["data"] is not None else None,
+    }
+
+    conn.execute(
+        "UPDATE one_time_items SET viewed_at = CURRENT_TIMESTAMP, "
+        "content_text = NULL, data = NULL, filename = '' WHERE id = ?",
+        (item_id,)
+    )
+    conn.execute(
+        "UPDATE messages SET content = ? WHERE chat_id = ? AND content LIKE ?",
+        (
+            "[[ONETIME_OPENED:" + str(item_id) + ":" + row["kind"] + "]]",
+            row["chat_id"],
+            "[[ONETIME:" + str(item_id) + ":%"
+        )
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify(payload)
 
 
 @app.route("/chat")
