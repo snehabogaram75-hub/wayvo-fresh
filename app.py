@@ -402,6 +402,45 @@ def build_live_block(message):
     )
 
 
+_DETAIL_RE = re.compile(
+    r"\b(?:detail|detailed|in detail|in depth|in-depth|elaborate|explain|"
+    r"step by step|step-by-step|steps|full|complete|comprehensive|thorough|"
+    r"essay|long answer|deep dive|tell me more|more about|vivaram|"
+    r"vivarinchu|pedda ga|detail ga|poorthiga|inka cheppu|clear ga cheppu)\b",
+    re.I,
+)
+_SHORT_RE = re.compile(
+    r"\b(?:short|shortly|brief|briefly|one line|one-line|one word|tldr|"
+    r"tl;dr|in a line|quick|quickly|just tell|chinna ga|chinnaga|"
+    r"short ga|summary in)\b",
+    re.I,
+)
+
+
+def response_style(message):
+    """Return (style_rule_text, max_tokens)."""
+    if _SHORT_RE.search(message) and not _DETAIL_RE.search(message):
+        return (
+            "LENGTH: The user wants it very short. Reply in 1-2 sentences "
+            "maximum, no lists, no headings.",
+            250,
+        )
+    if _DETAIL_RE.search(message) or len(message) > 600:
+        return (
+            "LENGTH: The user wants a detailed answer. Give a thorough, "
+            "well-structured explanation (short headings or numbered steps "
+            "are fine), but stay focused and avoid repeating yourself.",
+            1500,
+        )
+    return (
+        "LENGTH: Default to a SHORT answer: 2-4 sentences (about 60 words), "
+        "direct answer first. No headings, no bullet lists, no long "
+        "introductions or summaries, unless the user asked for steps or a "
+        "list. Do not add extra background nobody asked for.",
+        450,
+    )
+
+
 def ask_ollama(message, history):
     conversation = ""
 
@@ -411,6 +450,7 @@ def ask_ollama(message, history):
         conversation += f"{role}: {content}\n"
 
     live_block = build_live_block(message)
+    length_rule, max_toks = response_style(message)
 
     prompt = f"""
 You are WAYVO, a helpful personal AI assistant.
@@ -426,7 +466,7 @@ IMPORTANT RULES:
 4. If the user asks a technical question, explain it clearly.
 5. If the user asks for steps, give clear steps.
 6. If the user asks for a detailed answer, give a detailed answer.
-7. Otherwise keep the answer concise and natural.
+7. Otherwise keep the answer concise and natural (see LENGTH below).
 8. Do not make up facts.
 9. If you are uncertain about a fact, clearly say that you are uncertain.
 10. Remember relevant information from the conversation.
@@ -439,6 +479,8 @@ IMPORTANT RULES:
     last line, and never skip it, even for short answers.
 
 {live_block}
+{length_rule}
+
 Conversation history:
 {conversation}
 
@@ -465,7 +507,7 @@ WAYVO:
             }
         ],
         temperature=0.4,
-        max_tokens=1024
+        max_tokens=max_toks
     )
 
     return response.choices[0].message.content.strip()
