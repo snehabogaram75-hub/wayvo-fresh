@@ -350,6 +350,58 @@ def web_search(query):
     return "\n\n".join(lines)
 
 
+_LIVE_HINTS = [
+    "latest", "current", "currently", "today", "tonight", "yesterday",
+    "tomorrow", "this week", "this month", "this year", "right now",
+    "news", "recent", "recently", "breaking", "new release", "released",
+    "launch", "launched", "price", "stock", "share price", "score",
+    "weather", "forecast", "election", "who won", "who is the", "ceo of",
+    "president of", "prime minister", "trending", "upcoming", "schedule",
+    "exchange rate", "interest rate", "ippudu", "ee roju", "eeroju",
+    "repu", "ninna",
+]
+_LIVE_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(k) for k in _LIVE_HINTS) + r")\b", re.I
+)
+_YEAR_RE = re.compile(r"\b20(?:2[4-9])\b")
+
+
+def needs_live_info(message):
+    return bool(_LIVE_RE.search(message) or _YEAR_RE.search(message))
+
+
+def build_live_block(message):
+    import datetime
+    if not needs_live_info(message):
+        return ""
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%d %B %Y")
+    results = ""
+    try:
+        results = web_search(message[:200])
+    except Exception as e:
+        print("TAVILY ERROR:", repr(e))
+    if not results:
+        return (
+            "LIVE SEARCH UNAVAILABLE (today is " + today + "). "
+            "The user asked about current information but search failed. "
+            "Say clearly that you could not verify the latest information, "
+            "and give only general knowledge labelled as possibly outdated.\n"
+        )
+    return (
+        "LIVE WEB SEARCH RESULTS (today is " + today + "). "
+        "Use ONLY these for current facts:\n" + results + "\n\n"
+        "LIVE-INFO ANSWER FORMAT (plain text only, no markdown symbols like * or #):\n"
+        "✅ Confirmed: facts clearly stated in the search results (already happened or official).\n"
+        "🕒 Expected: things announced, scheduled or reported as upcoming, not yet happened.\n"
+        "🔮 Prediction / Assumption: your own reasoning, clearly not confirmed.\n"
+        "🔗 Sources: 1 to 3 URLs from the search results that you actually used, one per line.\n"
+        "Rules: skip a section if it is empty. Never put guesses under Confirmed. "
+        "Never invent URLs. If results are weak or conflicting, say so. "
+        "Keep each section to short lines starting with '-'. "
+        "Put the follow-up question after the Sources section as the last line.\n"
+    )
+
+
 def ask_ollama(message, history):
     conversation = ""
 
@@ -357,6 +409,8 @@ def ask_ollama(message, history):
         role = item.get("role", "")
         content = item.get("content", "")
         conversation += f"{role}: {content}\n"
+
+    live_block = build_live_block(message)
 
     prompt = f"""
 You are WAYVO, a helpful personal AI assistant.
@@ -384,6 +438,7 @@ IMPORTANT RULES:
     that helps the user go deeper or take the next step. Keep it on its own
     last line, and never skip it, even for short answers.
 
+{live_block}
 Conversation history:
 {conversation}
 
