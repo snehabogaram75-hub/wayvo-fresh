@@ -90,5 +90,18 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_files (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            mime TEXT DEFAULT '',
+            size_bytes INTEGER DEFAULT 0,
+            data BYTEA,
+            extracted_text TEXT,
+            summary TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
     conn.close()

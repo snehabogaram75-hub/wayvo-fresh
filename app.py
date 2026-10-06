@@ -460,6 +460,181 @@ def view_onetime(item_id):
     return jsonify(payload)
 
 
+MAX_FILE_BYTES = 10 * 1024 * 1024
+
+
+def _save_user_file(user_id, filename, mime, raw, text, summary):
+    import psycopg2
+    if not raw or len(raw) > MAX_FILE_BYTES:
+        return None
+    conn = get_db()
+    row = conn.execute(
+        "INSERT INTO user_files "
+        "(user_id, filename, mime, size_bytes, data, extracted_text, summary) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (
+            user_id,
+            (filename or "file")[:200],
+            mime or "application/octet-stream",
+            len(raw),
+            psycopg2.Binary(raw),
+            (text or "")[:300000],
+            summary or "",
+        )
+    ).fetchone()
+    conn.commit()
+    conn.close()
+    return row["id"]
+
+
+@app.route("/api/files", methods=["GET"])
+def list_files():
+    if "user_id" not in session:
+        return jsonify({"success": False, "files": []}), 401
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, filename, mime, size_bytes, created_at "
+        "FROM user_files WHERE user_id = ? ORDER BY id DESC",
+        (session["user_id"],)
+    ).fetchall()
+    conn.close()
+    return jsonify({"success": True, "files": [dict(r) for r in rows]})
+
+
+@app.route("/api/files/<int:file_id>/download", methods=["GET"])
+def download_file(file_id):
+    import io
+    from flask import send_file
+    if "user_id" not in session:
+        return jsonify({"success": False}), 401
+    conn = get_db()
+    row = conn.execute(
+        "SELECT filename, mime, data FROM user_files "
+        "WHERE id = ? AND user_id = ?",
+        (file_id, session["user_id"])
+    ).fetchone()
+    conn.close()
+    if not row or row["data"] is None:
+        return jsonify({"success": False, "message": "File not found"}), 404
+    return send_file(
+        io.BytesIO(bytes(row["data"])),
+        mimetype=row["mime"] or "application/octet-stream",
+        as_attachment=True,
+        download_name=row["filename"],
+    )
+
+
+@app.route("/api/files/<int:file_id>", methods=["DELETE"])
+def delete_file(file_id):
+    if "user_id" not in session:
+        return jsonify({"success": False}), 401
+    conn = get_db()
+    row = conn.execute(
+        "DELETE FROM user_files WHERE id = ? AND user_id = ? RETURNING id",
+        (file_id, session["user_id"])
+    ).fetchone()
+    conn.commit()
+    conn.close()
+    if not row:
+        return jsonify({"success": False, "message": "File not found"}), 404
+    return jsonify({"success": True})
+
+
+@app.route("/api/files/<int:file_id>/ask", methods=["POST"])
+def ask_file(file_id):
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+
+    data = request.get_json() or {}
+    question = (data.get("message") or "").strip() or \
+        "Summarize this file and list the key points."
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT filename, extracted_text, summary FROM user_files "
+        "WHERE id = ? AND user_id = ?",
+        (file_id, session["user_id"])
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        return jsonify({"success": False, "message": "File not found"}), 404
+
+    text = row["extracted_text"] or ""
+    if len(text) <= 14000:
+        context = text
+    else:
+        context = (
+            "SUMMARY OF WHOLE FILE:\n" + (row["summary"] or "")[:12000] +
+            "\n\nSTART OF FILE:\n" + text[:6000]
+        )
+
+    length_rule, max_toks = response_style(question)
+
+    try:
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are WAYVO, a helpful assistant. Answer using ONLY the file content provided. If the answer is not in the file, say so. " + length_rule
+                },
+                {
+                    "role": "user",
+                    "content": "File: " + row["filename"] + "\n\n" + context +
+                               "\n\nQuestion: " + question
+                }
+            ],
+            temperature=0.3,
+            max_tokens=max_toks
+        )
+        reply = response.choices[0].message.content.strip()
+    except Exception as e:
+        conn.close()
+        print("FILE ASK ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not answer: " + str(e)}), 500
+
+    chat_id = data.get("chat_id")
+    owned = None
+    if chat_id:
+        owned = conn.execute(
+            "SELECT id FROM chats WHERE id = ? AND user_id = ?",
+            (chat_id, session["user_id"])
+        ).fetchone()
+
+    if owned:
+        sync_chat(chat_id)
+    else:
+        cursor = conn.execute(
+            "INSERT INTO chats (user_id, title) VALUES (?, ?)",
+            (session["user_id"], "File: " + row["filename"][:30])
+        )
+        chat_id = cursor.lastrowid
+        session["chat_id"] = chat_id
+        session["chat_history"] = []
+
+    you_text = "About " + row["filename"] + ": " + question
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "You", you_text)
+    )
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "WAYVO", reply)
+    )
+    conn.commit()
+    conn.close()
+
+    history = session.get("chat_history", [])
+    history.append({"role": "You", "content": you_text})
+    history.append({"role": "WAYVO", "content": reply})
+    session["chat_history"] = history[-24:]
+    session.modified = True
+
+    return jsonify({"success": True, "reply": reply, "chat_id": chat_id})
+
+
 @app.route("/chat")
 def chat():
 
@@ -791,6 +966,8 @@ def api_chat_document():
         return jsonify({"success": False, "message": "Please select a document."}), 400
 
     try:
+        raw_bytes = uploaded_file.read()
+        uploaded_file.seek(0)
         document_text = extract_document_text(uploaded_file).strip()
 
         if not document_text:
@@ -852,6 +1029,15 @@ def api_chat_document():
         )
 
         ai_reply = final_response.choices[0].message.content.strip()
+
+        try:
+            _save_user_file(
+                session["user_id"], uploaded_file.filename,
+                uploaded_file.mimetype, raw_bytes, document_text,
+                combined_summary
+            )
+        except Exception as e:
+            print("FILE SAVE ERROR:", repr(e))
 
         sync_chat(request.form.get("chat_id"))
 
