@@ -156,10 +156,10 @@ def get_chats():
 
     chats = conn.execute(
         """
-        SELECT id, title, created_at
+        SELECT id, title, created_at, pinned, archived
         FROM chats
         WHERE user_id = ?
-        ORDER BY id DESC
+        ORDER BY pinned DESC, id DESC
         """,
         (session["user_id"],)
     ).fetchall()
@@ -290,6 +290,35 @@ def delete_chat(chat_id):
     return jsonify({
         "success": True
     })
+
+
+def _toggle_chat_flag(chat_id, column):
+    if "user_id" not in session:
+        return jsonify({"success": False}), 401
+
+    conn = get_db()
+    row = conn.execute(
+        "UPDATE chats SET " + column + " = NOT " + column +
+        " WHERE id = ? AND user_id = ? RETURNING " + column,
+        (chat_id, session["user_id"])
+    ).fetchone()
+    conn.commit()
+    conn.close()
+
+    if not row:
+        return jsonify({"success": False, "message": "Chat not found"}), 404
+
+    return jsonify({"success": True, column: row[column]})
+
+
+@app.route("/api/chats/<int:chat_id>/pin", methods=["POST"])
+def pin_chat(chat_id):
+    return _toggle_chat_flag(chat_id, "pinned")
+
+
+@app.route("/api/chats/<int:chat_id>/archive", methods=["POST"])
+def archive_chat(chat_id):
+    return _toggle_chat_flag(chat_id, "archived")
 
 
 @app.route("/chat")
