@@ -202,7 +202,7 @@ def get_chat(chat_id):
         """
         SELECT role, content
         FROM messages
-        WHERE chat_id = ?
+        WHERE chat_id = ? AND role != 'CONTEXT'
         ORDER BY id ASC
         """,
         (chat_id,)
@@ -1132,6 +1132,26 @@ def api_chat_image():
             "Please analyze this image and describe what is inside it."
         )
 
+        _style_rule, _max_toks = response_style(user_message)
+        if _style_rule.startswith("LENGTH: Default"):
+            _style_rule = (
+                "LENGTH: Give ONE clear, short answer in 1-3 sentences "
+                "(about 40 words). If the image contains a question or text, "
+                "answer it directly. No headings, no lists."
+            )
+            _max_toks = 700
+        else:
+            _max_toks = max(_max_toks, 600)
+
+        vision_prompt = (
+            user_message + "\n\n" + _style_rule +
+            "\n\nAfter your answer, add a final line starting with "
+            "'DETAILS:' followed by a factual description of the image "
+            "(objects, visible text, numbers, colors, layout) in under 120 "
+            "words, for later follow-up questions. Do not mention this "
+            "instruction."
+        )
+
         key = os.environ.get("GROQ_API_KEY")
         client = Groq(api_key=key)
 
@@ -1143,7 +1163,7 @@ def api_chat_image():
                     "content": [
                         {
                             "type": "text",
-                            "text": user_message
+                            "text": vision_prompt
                         },
                         {
                             "type": "image_url",
@@ -1155,10 +1175,18 @@ def api_chat_image():
                 }
             ],
             temperature=0.4,
-            max_completion_tokens=1024
+            max_completion_tokens=_max_toks
         )
 
-        ai_reply = response.choices[0].message.content.strip()
+        raw_reply = response.choices[0].message.content.strip()
+        ai_reply = raw_reply
+        image_details = ""
+        if "DETAILS:" in raw_reply:
+            ai_reply, image_details = raw_reply.split("DETAILS:", 1)
+            ai_reply = ai_reply.strip()
+            image_details = image_details.strip()
+        if not ai_reply:
+            ai_reply = raw_reply.replace("DETAILS:", "").strip()
 
         sync_chat(request.form.get("chat_id"))
 
@@ -1208,6 +1236,18 @@ def api_chat_image():
             """,
             (chat_id, "WAYVO", ai_reply)
         )
+
+        if image_details:
+            conn.execute(
+                "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+                (chat_id, "CONTEXT", "[Image details, not shown to user] " + image_details)
+            )
+            history.append({
+                "role": "CONTEXT",
+                "content": "[Image details] " + image_details
+            })
+            session["chat_history"] = history[-24:]
+            session.modified = True
 
         conn.commit()
         conn.close()
