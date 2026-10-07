@@ -333,6 +333,58 @@ def archive_chat(chat_id):
 MAX_ONETIME_BYTES = 5 * 1024 * 1024
 
 
+def analyze_image_short(blob, mime, question=""):
+    """Return (short_answer, hidden_details) for an image."""
+    q = (question or "").strip() or "What is in this image?"
+    style_rule, max_toks = response_style(q)
+    if style_rule.startswith("LENGTH: Default"):
+        style_rule = (
+            "LENGTH: Give ONE clear, short answer in 1-3 sentences "
+            "(about 40 words). If the image contains a question or text, "
+            "answer it directly. No headings, no lists."
+        )
+        max_toks = 700
+    else:
+        max_toks = max(max_toks, 600)
+
+    prompt = (
+        q + "\n\n" + style_rule +
+        "\n\nAfter your answer, add a final line starting with "
+        "'DETAILS:' followed by a factual description of the image "
+        "(objects, visible text, numbers, colors, layout) in under 120 "
+        "words, for later follow-up questions. Do not mention this "
+        "instruction."
+    )
+    b64 = base64.b64encode(blob).decode("utf-8")
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    response = client.chat.completions.create(
+        model="qwen/qwen3.8-27b",
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "data:" + (mime or "image/jpeg") + ";base64," + b64
+                    }
+                }
+            ]
+        }],
+        temperature=0.4,
+        max_completion_tokens=max_toks
+    )
+    raw = response.choices[0].message.content.strip()
+    answer, details = raw, ""
+    if "DETAILS:" in raw:
+        answer, details = raw.split("DETAILS:", 1)
+        answer = answer.strip()
+        details = details.strip()
+    if not answer:
+        answer = raw.replace("DETAILS:", "").strip()
+    return answer, details
+
+
 @app.route("/api/onetime", methods=["POST"])
 def create_onetime():
     import psycopg2
@@ -398,6 +450,37 @@ def create_onetime():
         "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
         (chat_id, "You", marker)
     )
+
+    reply = None
+    if kind == "image" and blob:
+        try:
+            reply, details = analyze_image_short(blob, mime, text)
+        except Exception as e:
+            print("ONETIME VISION ERROR:", repr(e))
+            reply, details = None, ""
+        if reply:
+            conn.execute(
+                "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+                (chat_id, "WAYVO", reply)
+            )
+            if details:
+                conn.execute(
+                    "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+                    (chat_id, "CONTEXT", "[Image details, not shown to user] " + details)
+                )
+
+    rows = conn.execute(
+        "SELECT role, content FROM messages WHERE chat_id = ? ORDER BY id DESC LIMIT 12",
+        (chat_id,)
+    ).fetchall()
+    session["chat_id"] = chat_id
+    session["chat_history"] = [
+        {"role": r["role"], "content": r["content"]}
+        for r in reversed(rows)
+        if not r["content"].startswith("[[ONETIME")
+    ]
+    session.modified = True
+
     conn.commit()
     conn.close()
 
@@ -405,7 +488,8 @@ def create_onetime():
         "success": True,
         "chat_id": chat_id,
         "item_id": item_id,
-        "content": marker
+        "content": marker,
+        "reply": reply
     })
 
 
