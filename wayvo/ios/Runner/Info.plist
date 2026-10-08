@@ -26,6 +26,16 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>WAYVO needs the camera to take photos you send.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>WAYVO uses Face ID to unlock your private chats.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WAYVO needs the microphone for voice chat.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>WAYVO needs photo access so you can send images.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>WAYVO uses speech recognition for voice chat.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
