@@ -1065,6 +1065,9 @@ def api_chat_document():
             "Please analyze this document and summarize the important information."
         )
 
+        _doc_rule, _doc_toks = response_style(user_message)
+        user_message = user_message + "\n\n" + _doc_rule + " Plain text only."
+
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
         chunk_size = 8000
@@ -1109,7 +1112,7 @@ def api_chat_document():
                 )
             }],
             temperature=0.3,
-            max_completion_tokens=700
+            max_completion_tokens=max(_doc_toks, 500)
         )
 
         ai_reply = final_response.choices[0].message.content.strip()
