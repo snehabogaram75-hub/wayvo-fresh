@@ -760,7 +760,9 @@ _YEAR_RE = re.compile(r"\b20(?:2[4-9])\b")
 
 
 def needs_live_info(message):
-    return bool(_LIVE_RE.search(message) or _YEAR_RE.search(message))
+    # WAYVO uses web search by default for user information requests.
+    # This prevents outdated or missing-live-information responses.
+    return bool(message and message.strip())
 
 
 def build_live_block(message):
@@ -782,13 +784,13 @@ def build_live_block(message):
         )
     return (
         "LIVE WEB SEARCH RESULTS (today is " + today + "). "
-        "Use ONLY these for current facts:\n" + results + "\n\n"
+        "Use these web results as the primary source for the user answer. Prefer information directly supported by the results. Do not claim that live/current information is unavailable when search results are present.\n" + results + "\n\n"
         "LIVE-INFO ANSWER FORMAT (plain text only, no markdown symbols like * or #):\n"
         "✅ Confirmed: facts clearly stated in the search results (already happened or official).\n"
         "🕒 Expected: things announced, scheduled or reported as upcoming, not yet happened.\n"
         "🔮 Prediction / Assumption: your own reasoning, clearly not confirmed.\n"
         "🔗 Sources: 1 to 3 URLs from the search results that you actually used, one per line.\n"
-        "Rules: skip a section if it is empty. Never put guesses under Confirmed. "
+        "Rules: skip a section if it is empty. Never put guesses under Confirmed. For general information questions, answer normally using the web results when relevant. For current or changing information, rely on the web results. "
         "Never invent URLs. If results are weak or conflicting, say so. "
         "Keep each section to short lines starting with '-'. "
         "Put the follow-up question after the Sources section as the last line.\n"
