@@ -6,16 +6,29 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
-      - name: Deploy Flutter Web
-        uses: peaceiris/actions-gh-pages@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload WAYVO Web
+        uses: actions/upload-pages-artifact@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./wayvo/build/web
+          path: ./wayvo/build/web
+
+      - name: Deploy WAYVO
+        id: deployment
+        uses: actions/deploy-pages@v4
