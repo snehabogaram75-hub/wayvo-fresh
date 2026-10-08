@@ -745,9 +745,7 @@ def web_search(query):
         content = (r.get("content", "") or "")[:1200]
         url = r.get("url", "")
         lines.append(f"Title: {title} | Content: {content} | URL: {url}")
-    return "
-
-".join(lines)
+    return "\n\n".join(lines)
 
 
 _LIVE_HINTS = [
