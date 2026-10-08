@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://snehabogaram75-hub.github.io/wayvo-fresh/sitemap.xml

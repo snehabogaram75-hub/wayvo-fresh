@@ -24,10 +24,19 @@ jobs:
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
 
+      - name: Assemble site
+        run: |
+          mkdir -p _site/app
+          cp -r site/* _site/
+          if [ -d wayvo/build/web ]; then
+            cp -r wayvo/build/web/* _site/app/
+            sed -i 's#<base href="[^"]*">#<base href="/wayvo-fresh/app/">#' _site/app/index.html
+          fi
+
       - name: Upload WAYVO Web
         uses: actions/upload-pages-artifact@v4
         with:
-          path: ./wayvo/build/web
+          path: ./_site
 
       - name: Deploy WAYVO
         id: deployment
