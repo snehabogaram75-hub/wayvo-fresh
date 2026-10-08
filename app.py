@@ -733,14 +733,21 @@ def web_search(query):
     if not key:
         return ""
     client = TavilyClient(api_key=key)
-    results = client.search(query=query, search_depth="advanced", max_results=5)
+    results = client.search(
+        query=query,
+        search_depth="basic",
+        max_results=3,
+        include_answer=False
+    )
     lines = []
     for r in results.get("results", []):
         title = r.get("title", "")
-        content = r.get("content", "")
+        content = (r.get("content", "") or "")[:1200]
         url = r.get("url", "")
         lines.append(f"Title: {title} | Content: {content} | URL: {url}")
-    return "\n\n".join(lines)
+    return "
+
+".join(lines)
 
 
 _LIVE_HINTS = [
