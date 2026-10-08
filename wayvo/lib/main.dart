@@ -444,7 +444,17 @@ class _WayvoHomeState extends State<WayvoHome>
     });
   }
 
+  String speakableText(String t) {
+    var out = t;
+    final i = out.indexOf('🔗');
+    if (i != -1) out = out.substring(0, i);
+    out = out.replaceAll(RegExp(r'https?://\S+'), '');
+    out = out.replaceAll(RegExp('✅|🕒|🔮|🔗'), '');
+    return out.trim();
+  }
+
   Future<void> speak(String text) async {
+    text = speakableText(text);
     final clean = text
         .replaceAll(RegExp(r'[*#`_>]'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
@@ -1364,7 +1374,7 @@ class _WayvoHomeState extends State<WayvoHome>
               ],
             ),
 
-            if (isMobile && historyOpen)
+            if (historyOpen)
               Positioned(
                 left: 0,
                 top: 0,
@@ -1380,116 +1390,121 @@ class _WayvoHomeState extends State<WayvoHome>
   Widget buildSidebar() {
     return Container(
       width: 270,
-      decoration: const BoxDecoration(
-        color: Color(0xFF17152A),
-      ),
-      child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'WAYVO',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-              ),
-            ),
-          ),
-
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: startNewChat,
-                icon: const Icon(Icons.add),
-                label: const Text('New Chat'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor:
-                      const Color(0xFF17152A),
-                  shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(12),
+      color: const Color(0xFF17152A),
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'WAYVO',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
                   ),
                 ),
               ),
             ),
-          ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                children: [
+                  _sideItem(
+                    Icons.add,
+                    'New Chat',
+                    onTap: startNewChat,
+                  ),
+                  _sideItem(
+                    Icons.history,
+                    'Chat History',
+                    onTap: () => setState(() => historyOpen = true),
+                  ),
+                  const Divider(color: Colors.white24, height: 24),
 
-          const SizedBox(height: 28),
+                  _sideItem(Icons.auto_awesome, 'Image Generation'),
+                  _sideItem(Icons.code, 'Code'),
+                  _sideItem(Icons.book_outlined, 'Diary'),
+                  _sideItem(Icons.extension_outlined, 'Plugins'),
+                  _sideItem(Icons.calendar_month_outlined, 'Schedule / Interview'),
+                  _sideItem(Icons.folder_outlined, 'Library'),
+                  _sideItem(Icons.terminal, 'Codex'),
+                  _sideItem(Icons.work_outline, 'Projects'),
 
-          const Padding(
-            padding:
-                EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              'CHATS',
-              style: TextStyle(
-                color: Colors.white54,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
+                  const Divider(color: Colors.white24, height: 24),
+
+                  _sideItem(Icons.person_outline, 'Profile / Account'),
+                  _sideItem(Icons.tune, 'Personalization'),
+                  _sideItem(Icons.settings_outlined, 'Settings'),
+                  _sideItem(Icons.help_outline, 'Help'),
+                  _sideItem(Icons.logout, 'Log out'),
+                ],
               ),
             ),
-          ),
-
-          const SizedBox(height: 12),
-
-          Expanded(
-            child: chatList.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      'Your conversations will appear here.',
-                      style: TextStyle(color: Colors.white38, fontSize: 13),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: visibleChats.length + headerCount,
-                    itemBuilder: (context, index) {
-                      if (index < headerCount) {
-                        return buildListHeader(index);
-                      }
-                      final c = visibleChats[index - headerCount];
-                      final isActive = c['id'] == currentChatId;
-                      return ListTile(
-                        selected: isActive,
-                        selectedTileColor: Colors.white12,
-                        title: Text(
-                          c['title'] ?? 'Chat',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 14),
-                        ),
-                        onTap: () => openChat(c['id']),
-                        onLongPress: () => showChatOptions(c),
-                        leading: c['pinned'] == true
-                            ? const Icon(
-                                Icons.push_pin,
-                                size: 16,
-                                color: Colors.white54,
-                              )
-                            : null,
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.more_vert,
-                            size: 18,
-                            color: Colors.white38,
-                          ),
-                          onPressed: () => showChatOptions(c),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _sideItem(IconData icon, String title, {VoidCallback? onTap}) {
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+      leading: Icon(icon, color: Colors.white70, size: 20),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+        ),
+      ),
+      onTap: onTap ?? () async {
+        if (title == 'Log out') {
+          final shouldLogout = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('Log out?'),
+              content: const Text(
+                'Are you sure you want to log out of WAYVO?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('No'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Yes, Log out'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldLogout != true) return;
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('email');
+          if (!mounted) return;
+
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const AuthScreen()),
+            (route) => false,
+          );
+          return;
+        }
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FeatureScreen(title: title),
+          ),
+        );
+      },
     );
   }
 
@@ -2824,4 +2839,431 @@ class _WayvoHomeState extends State<WayvoHome>
       ),
     );
   }
+}
+
+
+
+class FeatureScreen extends StatelessWidget {
+  final String title;
+  const FeatureScreen({super.key, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F7F2),
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: const Color(0xFFF8F7F2),
+        foregroundColor: Colors.black87,
+        elevation: 0,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: _workspace(context),
+      ),
+    );
+  }
+
+  Widget _workspace(BuildContext context) {
+    switch (title) {
+      case 'Code':
+        return _codeWorkspace();
+      case 'Diary':
+        return _diaryWorkspace();
+      case 'Image Generation':
+        return _imageWorkspace();
+      case 'Plugins':
+        return _pluginsWorkspace();
+      case 'Schedule / Interview':
+        return _scheduleWorkspace();
+      case 'Library':
+        return _libraryWorkspace();
+      case 'Codex':
+        return _codexWorkspace();
+      case 'Projects':
+        return _projectsWorkspace();
+      case 'Profile / Account':
+        return _profileWorkspace();
+      case 'Personalization':
+        return _personalizationWorkspace();
+      case 'Settings':
+        return _settingsWorkspace();
+      case 'Help':
+        return _helpWorkspace();
+      default:
+        return Center(child: Text(title));
+    }
+  }
+
+  Widget _heading(String text, String subtitle) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(text, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 6),
+      Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 15)),
+      const SizedBox(height: 24),
+    ],
+  );
+
+  Widget _card(Widget child) => Card(
+    elevation: 0,
+    child: Padding(padding: const EdgeInsets.all(18), child: child),
+  );
+
+  Widget _codeWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('WAYVO Code', 'Write, explain, debug, translate and improve code.'),
+      _card(Column(
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: 'Python',
+            decoration: const InputDecoration(labelText: 'Programming language'),
+            items: ['Python','C','C++','Java','JavaScript','Dart','SQL','HTML/CSS']
+                .map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
+            onChanged: (_) {},
+          ),
+          const SizedBox(height: 16),
+          const TextField(
+            maxLines: 12,
+            decoration: InputDecoration(
+              hintText: 'Write or paste your code here...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            children: ['Explain','Debug','Translate','Optimize']
+                .map((x) => ElevatedButton(onPressed: () {}, child: Text(x))).toList(),
+          ),
+        ],
+      )),
+    ],
+  );
+
+  Widget _diaryWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('My Diary', 'Write, save and revisit your personal entries.'),
+      _card(Column(
+        children: [
+          const TextField(decoration: InputDecoration(labelText: 'Entry title')),
+          const SizedBox(height: 16),
+          const TextField(
+            maxLines: 14,
+            decoration: InputDecoration(
+              hintText: 'Dear Diary...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            const Text('Mood: '),
+            DropdownButton<String>(
+              value: '😊 Happy',
+              items: ['😊 Happy','😌 Calm','😐 Normal','😔 Sad','🤩 Excited']
+                  .map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
+              onChanged: (_) {},
+            ),
+            const Spacer(),
+            ElevatedButton(onPressed: () {}, child: const Text('Save Entry')),
+          ]),
+        ],
+      )),
+    ],
+  );
+
+  Widget _imageWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('Image Generation', 'Create images and keep your generated work in your library.'),
+      _card(Column(
+        children: [
+          const TextField(
+            maxLines: 4,
+            decoration: InputDecoration(
+              hintText: 'Describe the image you want...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            ElevatedButton(onPressed: () {}, child: const Text('Generate Image')),
+            const SizedBox(width: 12),
+            OutlinedButton(onPressed: () {}, child: const Text('Open Image Library')),
+          ]),
+        ],
+      )),
+    ],
+  );
+
+  Widget _pluginsWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('Plugins', 'Extend WAYVO with useful tools and services.'),
+      _card(Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _pluginRow('Web Search', 'Find current information on the web.'),
+          _pluginRow('File Tools', 'Work with uploaded documents.'),
+          _pluginRow('Calendar', 'Plan and organize events.'),
+          _pluginRow('Productivity', 'Help with everyday tasks.'),
+        ],
+      )),
+    ],
+  );
+
+  Widget _pluginRow(String name, String desc) => ListTile(
+    leading: const Icon(Icons.extension_outlined),
+    title: Text(name),
+    subtitle: Text(desc),
+    trailing: Switch(value: false, onChanged: (_) {}),
+  );
+
+  Widget _scheduleWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('Schedule / Interview', 'Plan interviews, events, tasks and important dates.'),
+      _card(Column(
+        children: [
+          const TextField(decoration: InputDecoration(labelText: 'Schedule title')),
+          const SizedBox(height: 12),
+          const TextField(decoration: InputDecoration(labelText: 'Date and time')),
+          const SizedBox(height: 12),
+          const TextField(
+            maxLines: 4,
+            decoration: InputDecoration(labelText: 'Details / preparation notes'),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: () {}, child: const Text('Add to Schedule')),
+        ],
+      )),
+    ],
+  );
+
+  Widget _libraryWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('Library', 'Your saved chats, files, images and documents.'),
+      _card(const ListTile(
+        leading: Icon(Icons.folder_outlined),
+        title: Text('My Library'),
+        subtitle: Text('Saved content will appear here.'),
+      )),
+    ],
+  );
+
+  Widget _codexWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('Codex', 'Your dedicated development workspace.'),
+      _card(const TextField(
+        maxLines: 18,
+        decoration: InputDecoration(
+          hintText: 'Start a coding task or project...',
+          border: OutlineInputBorder(),
+        ),
+      )),
+    ],
+  );
+
+  Widget _projectsWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('Projects', 'Keep related chats, files and tasks together.'),
+      _card(Row(
+        children: [
+          const Expanded(child: Text('Create a new project')),
+          ElevatedButton(onPressed: () {}, child: const Text('New Project')),
+        ],
+      )),
+    ],
+  );
+
+  Widget _profileWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('Profile / Account', 'Manage your WAYVO account.'),
+      _card(const ListTile(
+        leading: CircleAvatar(child: Icon(Icons.person)),
+        title: Text('Your Profile'),
+        subtitle: Text('Account information and profile settings'),
+      )),
+    ],
+  );
+
+  Widget _personalizationWorkspace() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _heading('Personalization', 'Choose how WAYVO should respond to you.'),
+      _card(Column(
+        children: [
+          SwitchListTile(value: true, onChanged: (_) {}, title: const Text('Personalized responses')),
+          const ListTile(title: Text('Response style'), subtitle: Text('Choose concise, balanced or detailed')),
+          const ListTile(title: Text('Language'), subtitle: Text('English')),
+          const ListTile(title: Text('Tone'), subtitle: Text('Friendly and helpful')),
+        ],
+      )),
+    ],
+  );
+
+  Widget _settingsWorkspace() => ListView(
+    children: [
+      _heading('Settings', 'Manage your WAYVO experience.'),
+      _card(Column(
+        children: [
+          const ListTile(
+            leading: Icon(Icons.palette_outlined),
+            title: Text('Appearance'),
+            subtitle: Text('Light, Dark or System theme'),
+            trailing: Icon(Icons.chevron_right),
+          ),
+          const ListTile(
+            leading: Icon(Icons.chat_outlined),
+            title: Text('Chat'),
+            subtitle: Text('Enter to send, auto-save, chat history'),
+            trailing: Icon(Icons.chevron_right),
+          ),
+          const ListTile(
+            leading: Icon(Icons.auto_awesome),
+            title: Text('AI & Personalization'),
+            subtitle: Text('Response style, language and tone'),
+            trailing: Icon(Icons.chevron_right),
+          ),
+          const ListTile(
+            leading: Icon(Icons.mic_none),
+            title: Text('Voice'),
+            subtitle: Text('Voice input, voice responses and speed'),
+            trailing: Icon(Icons.chevron_right),
+          ),
+          const ListTile(
+            leading: Icon(Icons.notifications_outlined),
+            title: Text('Notifications'),
+            subtitle: Text('Schedule and interview reminders'),
+            trailing: Icon(Icons.chevron_right),
+          ),
+          const ListTile(
+            leading: Icon(Icons.lock_outline),
+            title: Text('Privacy & Data'),
+            subtitle: Text('Saved chats, library data and account data'),
+            trailing: Icon(Icons.chevron_right),
+          ),
+          const ListTile(
+            leading: Icon(Icons.person_outline),
+            title: Text('Account'),
+            subtitle: Text('Profile, account details and logout'),
+            trailing: Icon(Icons.chevron_right),
+          ),
+          const ListTile(
+            leading: Icon(Icons.info_outline),
+            title: Text('About WAYVO'),
+            subtitle: Text('Version, terms, privacy and licenses'),
+            trailing: Icon(Icons.chevron_right),
+          ),
+        ],
+      )),
+    ],
+  );
+
+  Widget _helpWorkspace() => ListView(
+    children: [
+      _heading('Help & Support', 'Find answers or contact the WAYVO team directly.'),
+      _card(Column(
+        children: [
+          const TextField(
+            decoration: InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Search help...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 18),
+          const ListTile(
+            leading: Icon(Icons.chat_outlined),
+            title: Text('How do I start a new chat?'),
+            subtitle: Text('Use New Chat from the sidebar.'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.auto_awesome),
+            title: Text('How do I generate an image?'),
+            subtitle: Text('Open Image Generation and enter your prompt.'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.code),
+            title: Text('How do I use Code?'),
+            subtitle: Text('Choose a programming language and enter your code.'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.folder_outlined),
+            title: Text('How does Library work?'),
+            subtitle: Text('Your saved content will be organized there.'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.work_outline),
+            title: Text('How do Projects work?'),
+            subtitle: Text('Group related chats, files and tasks together.'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.share_outlined),
+            title: Text('How do I share a chat?'),
+            subtitle: Text('Use the Share option from a conversation.'),
+          ),
+        ],
+      )),
+      const SizedBox(height: 18),
+      _card(Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Quick Tips',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          const Text('• Use New Chat for a fresh conversation.'),
+          const Text('• Use Chat History to find previous conversations.'),
+          const Text('• Use Library to manage saved content.'),
+          const Text('• Use Projects to organize related work.'),
+          const Text('• Use Personalization to customize WAYVO.'),
+        ],
+      )),
+      const SizedBox(height: 18),
+      _card(Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Need more help?',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Contact the WAYVO team directly for support, bug reports or suggestions.',
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.email_outlined),
+                label: const Text('Contact Support'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.bug_report_outlined),
+                label: const Text('Report a Problem'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.lightbulb_outline),
+                label: const Text('Suggest an Improvement'),
+              ),
+            ],
+          ),
+        ],
+      )),
+    ],
+  );
+
 }
