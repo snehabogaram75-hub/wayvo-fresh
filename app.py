@@ -733,12 +733,17 @@ def web_search(query):
     if not key:
         return ""
     client = TavilyClient(api_key=key)
-    results = client.search(
-        query=query,
-        search_depth="basic",
-        max_results=3,
-        include_answer=False
-    )
+    is_news = bool(re.search(r"\b(news|headlines|breaking)\b", query, re.I))
+    options = {
+        "query": query,
+        "search_depth": "advanced" if is_news else "basic",
+        "max_results": 5 if is_news else 3,
+        "include_answer": False,
+    }
+    if is_news:
+        options["topic"] = "news"
+        options["time_range"] = "day"
+    results = client.search(**options)
     lines = []
     for r in results.get("results", []):
         title = r.get("title", "")
