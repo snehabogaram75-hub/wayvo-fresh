@@ -719,6 +719,111 @@ def ask_file(file_id):
     return jsonify({"success": True, "reply": reply, "chat_id": chat_id})
 
 
+NL = chr(10)
+_IMG_LIMIT = {}
+
+
+def _groq_text(prompt, max_toks=1800, temp=0.2):
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-20b",
+        messages=[
+            {"role": "system", "content": "You are WAYVO Code, a precise programming assistant. Be concise."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=temp,
+        max_tokens=max_toks,
+    )
+    return response.choices[0].message.content.strip()
+
+
+@app.route("/api/tools/code", methods=["POST"])
+def tools_code():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    action = d.get("action", "generate")
+    lang = str(d.get("language") or "Python")[:30]
+    text = str(d.get("text") or "").strip()[:12000]
+    if not text:
+        return jsonify({"success": False, "message": "Please enter a request or some code."}), 400
+    prompts = {
+        "generate": f"Write {lang} code for this request. Reply with the complete code in ONE fenced code block first, then at most 3 short lines on how to run or use it.{NL}{NL}Request:{NL}{text}",
+        "explain": f"Explain this {lang} code clearly and briefly: what it does, the key parts, and any problems.{NL}{NL}Code:{NL}{text}",
+        "debug": f"Find the bugs in this {lang} code. List each bug in one line, then give the fixed code in ONE fenced code block.{NL}{NL}Code:{NL}{text}",
+        "translate": f"Translate this code into {lang}. Reply with the translated code in ONE fenced code block, then one short line of notes if needed.{NL}{NL}Code:{NL}{text}",
+        "optimize": f"Optimize this {lang} code for readability and speed. Give the improved code in ONE fenced code block, then at most 3 lines on what changed.{NL}{NL}Code:{NL}{text}",
+    }
+    prompt = prompts.get(action)
+    if not prompt:
+        return jsonify({"success": False, "message": "Unknown action."}), 400
+    try:
+        reply = _groq_text(prompt)
+    except Exception as e:
+        print("CODE TOOL ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not process the code. Try again."}), 500
+    return jsonify({"success": True, "reply": reply})
+
+
+@app.route("/api/tools/image", methods=["POST"])
+def tools_image():
+    import time
+    import random
+    import urllib.parse
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    prompt = str(d.get("prompt") or "").strip()[:500]
+    if len(prompt) < 3:
+        return jsonify({"success": False, "message": "Please describe the image you want."}), 400
+    uid = session["user_id"]
+    now = time.time()
+    recent = [t for t in _IMG_LIMIT.get(uid, []) if now - t < 3600]
+    if len(recent) >= 15:
+        return jsonify({"success": False, "message": "Image limit reached (15 per hour). Try again later."}), 429
+    try:
+        url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt, safe="")
+        r = requests.get(
+            url,
+            params={"width": 1024, "height": 1024, "model": "flux", "nologo": "true", "seed": random.randint(1, 999999)},
+            headers={"User-Agent": "WAYVO/1.0"},
+            timeout=25,
+        )
+    except Exception as e:
+        print("IMAGE TOOL ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Image service is not reachable. Try again in a minute."}), 502
+    ctype = r.headers.get("Content-Type", "")
+    if r.status_code != 200 or not ctype.startswith("image/") or len(r.content) < 1000:
+        return jsonify({"success": False, "message": "Image service is busy. Try again in a minute."}), 502
+    recent.append(now)
+    _IMG_LIMIT[uid] = recent
+    try:
+        _save_user_file(uid, "image-" + str(int(now)) + ".jpg", ctype, r.content, "", prompt)
+    except Exception as e:
+        print("IMAGE SAVE ERROR:", repr(e))
+    return jsonify({
+        "success": True,
+        "mime": ctype,
+        "data_b64": base64.b64encode(r.content).decode("ascii"),
+    })
+
+
+@app.route("/api/chats/delete_all", methods=["POST"])
+def delete_all_chats():
+    if "user_id" not in session:
+        return jsonify({"success": False}), 401
+    uid = session["user_id"]
+    conn = get_db()
+    conn.execute("DELETE FROM one_time_items WHERE user_id = ?", (uid,))
+    conn.execute("DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id = ?)", (uid,))
+    conn.execute("DELETE FROM chats WHERE user_id = ?", (uid,))
+    conn.commit()
+    conn.close()
+    session.pop("chat_id", None)
+    session["chat_history"] = []
+    return jsonify({"success": True})
+
+
 @app.route("/chat")
 def chat():
 
@@ -831,7 +936,7 @@ _SHORT_RE = re.compile(
 )
 
 
-def response_style(message):
+def response_style(message, pref="short"):
     """Return (style_rule_text, max_tokens)."""
     if _SHORT_RE.search(message) and not _DETAIL_RE.search(message):
         return (
@@ -846,6 +951,16 @@ def response_style(message):
             "are fine), but stay focused and avoid repeating yourself.",
             1500,
         )
+    if pref == "detailed":
+        return (
+            "LENGTH: The user prefers detailed answers by default. Give a thorough, well-structured explanation.",
+            1500,
+        )
+    if pref == "balanced":
+        return (
+            "LENGTH: Give a balanced answer of about 5-8 sentences, no padding.",
+            800,
+        )
     return (
         "LENGTH: Default to a SHORT answer: 2-4 sentences (about 60 words), "
         "direct answer first. No headings, no bullet lists, no long "
@@ -855,7 +970,7 @@ def response_style(message):
     )
 
 
-def ask_ollama(message, history):
+def ask_ollama(message, history, pref="short"):
     conversation = ""
 
     for item in history[-12:]:
@@ -864,7 +979,7 @@ def ask_ollama(message, history):
         conversation += f"{role}: {content}\n"
 
     live_block = build_live_block(message)
-    length_rule, max_toks = response_style(message)
+    length_rule, max_toks = response_style(message, pref)
 
     prompt = f"""
 You are WAYVO, a helpful personal AI assistant.
@@ -996,7 +1111,7 @@ def api_chat():
     history = session.get("chat_history", [])
 
     try:
-        ai_reply = ask_ollama(message, history)
+        ai_reply = ask_ollama(message, history, data.get("style") or "short")
 
     except requests.exceptions.ConnectionError:
         ai_reply = "WAYVO AI is not running right now. Please start Ollama."

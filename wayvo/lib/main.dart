@@ -15,13 +15,14 @@ import 'package:local_auth/local_auth.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'my_files.dart';
+import 'tools.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 
 final Dio dio = Dio(
   BaseOptions(
-    baseUrl: 'https://wayvo-fresh-1.onrender.com',
+    baseUrl: const String.fromEnvironment("WAYVO_API_URL", defaultValue: "https://" "wayvo-fresh-1.onrender.com"),
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(minutes: 5),
     extra: {'withCredentials': true},
@@ -37,24 +38,48 @@ void main() async {
     );
     dio.interceptors.add(CookieManager(cookieJar));
   }
+  final prefs = await SharedPreferences.getInstance();
+  final savedTheme = prefs.getString('wayvo_theme_mode');
+  wayvoThemeMode.value = ThemeMode.values.firstWhere(
+    (mode) => mode.name == savedTheme,
+    orElse: () => ThemeMode.light,
+  );
   runApp(const WayvoApp());
 }
+
+final ValueNotifier<ThemeMode> wayvoThemeMode =
+    ValueNotifier<ThemeMode>(ThemeMode.light);
 
 class WayvoApp extends StatelessWidget {
   const WayvoApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      themeMode: ThemeMode.light,
-      debugShowCheckedModeBanner: false,
-      title: 'WAYVO',
-      theme: ThemeData(
-        fontFamily: 'Arial',
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6C63FF)),
-        scaffoldBackgroundColor: const Color(0xFFF8F7F2),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: wayvoThemeMode,
+      builder: (context, mode, _) => MaterialApp(
+        themeMode: mode,
+        debugShowCheckedModeBanner: false,
+        title: 'WAYVO',
+        theme: ThemeData(
+          fontFamily: 'Arial',
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6C63FF),
+            brightness: Brightness.light,
+          ),
+          scaffoldBackgroundColor: const Color(0xFFF8F7F2),
+        ),
+        darkTheme: ThemeData(
+          fontFamily: 'Arial',
+          brightness: Brightness.dark,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6C63FF),
+            brightness: Brightness.dark,
+          ),
+          scaffoldBackgroundColor: const Color(0xFF121212),
+        ),
+        home: const AuthScreen(),
       ),
-      home: const AuthScreen(),
     );
   }
 }
@@ -154,7 +179,7 @@ class _AuthScreenState extends State<AuthScreen> {
       });
     } catch (e) {
       setState(() {
-        errorMessage = 'Something went wrong.';
+        errorMessage = 'Login error: ' + e.toString();
       });
     } finally {
       if (mounted) {
@@ -385,7 +410,8 @@ class _WayvoHomeState extends State<WayvoHome>
   Future<void> initTts() async {
     final inOk = await tts.isLanguageAvailable('en-IN');
     await tts.setLanguage(inOk == true ? 'en-IN' : 'en-US');
-    await tts.setSpeechRate(0.5);
+    final ttsPrefs = await SharedPreferences.getInstance();
+    await tts.setSpeechRate(ttsPrefs.getDouble('tts_rate') ?? 0.5);
     await tts.awaitSpeakCompletion(true);
     tts.setStartHandler(() {
       voiceStatus.value = 'Speaking…';
@@ -847,7 +873,8 @@ class _WayvoHomeState extends State<WayvoHome>
     try {
       final response = await dio.post(
         '/api/chat',
-        data: {'message': message, 'chat_id': currentChatId},
+        data: {'style': (await SharedPreferences.getInstance()).getString('resp_style') ?? 'short',
+          'message': message, 'chat_id': currentChatId},
         options: Options(contentType: Headers.jsonContentType),
       );
 
@@ -1276,7 +1303,7 @@ class _WayvoHomeState extends State<WayvoHome>
     final isMobile = width < 800;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F7F2),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Stack(
           children: [
@@ -2723,6 +2750,20 @@ class FeatureScreen extends StatefulWidget {
 }
 
 class _FeatureScreenState extends State<FeatureScreen> {
+  final Map<String, bool> _pluginEnabled = {
+    'Web Search': false,
+    'File Tools': false,
+    'Calendar': false,
+    'Productivity': false,
+  };
+  bool _personalizedResponses = true;
+  String _responseStyle = 'Balanced';
+  String _responseLanguage = 'English';
+  String _responseTone = 'Friendly';
+  bool _generatingImage = false;
+  String _imageStatus = '';
+  String? _generatedImageUrl;
+
   String get title => widget.title;
   final Map<String, TextEditingController> _fields = {};
   List<Map<String, dynamic>> _entries = [];
@@ -2825,11 +2866,11 @@ class _FeatureScreenState extends State<FeatureScreen> {
   Widget _workspace(BuildContext context) {
     switch (title) {
       case 'Code':
-        return _codeWorkspace();
+        return const CodeWorkspace();
       case 'Diary':
         return _diaryWorkspace();
       case 'Image Generation':
-        return _imageWorkspace();
+        return const ImageWorkspace();
       case 'Plugins':
         return _pluginsWorkspace();
       case 'Schedule / Interview':
@@ -2843,9 +2884,9 @@ class _FeatureScreenState extends State<FeatureScreen> {
       case 'Profile / Account':
         return _profileWorkspace();
       case 'Personalization':
-        return _personalizationWorkspace();
+        return const PersonalizationWorkspace();
       case 'Settings':
-        return _settingsWorkspace();
+        return const SettingsWorkspace();
       case 'Help':
         return _helpWorkspace();
       default:
@@ -2870,6 +2911,48 @@ class _FeatureScreenState extends State<FeatureScreen> {
     elevation: 0,
     child: Padding(padding: const EdgeInsets.all(18), child: child),
   );
+
+  Future<void> _runCodeAction(String action) async {
+    final code = _field('code-body').text.trim();
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter code first.')),
+      );
+      return;
+    }
+
+    final prompt = [
+      'You are WAYVO Code, a programming assistant.',
+      'Action: $action',
+      'Programming language: $_language',
+      'Explain: explain the code step by step.',
+      'Debug: find errors and provide corrected code.',
+      'Translate: convert it to the selected language.',
+      'Optimize: improve clarity and efficiency while preserving behavior.',
+      'Do not claim to have run code unless you actually did.',
+      'Code:',
+      code,
+    ].join('\n');
+
+    setState(() => _codeResult = 'Processing $action request...');
+    try {
+      final response = await dio.post('/api/chat', data: {'message': prompt});
+      final data = response.data;
+      String result = '';
+      if (data is Map) {
+        result = (data['reply'] ?? data['ai_reply'] ?? data['response'] ??
+          data['answer'] ?? data['message'] ?? '').toString();
+      }
+      if (result.trim().isEmpty) {
+        result = 'Unexpected server response: ${data.toString()}';
+      }
+      if (!mounted) return;
+      setState(() => _codeResult = result);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _codeResult = 'Request failed. Check login and backend connection. Details: $e');
+    }
+  }
 
   Widget _codeWorkspace() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2931,19 +3014,7 @@ class _FeatureScreenState extends State<FeatureScreen> {
               children: ['Explain', 'Debug', 'Translate', 'Optimize']
                   .map(
                     (x) => ElevatedButton(
-                      onPressed: () {
-                        final code = _field('code-body').text.trim();
-                        if (code.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Enter code first.')),
-                          );
-                          return;
-                        }
-                        setState(
-                          () => _codeResult =
-                              '$x selected for $_language. Connect WAYVO AI backend to process this code.\n\n$code',
-                        );
-                      },
+                      onPressed: () => _runCodeAction(x),
                       child: Text(x),
                     ),
                   )
@@ -3010,44 +3081,117 @@ class _FeatureScreenState extends State<FeatureScreen> {
     ],
   );
 
-  Widget _imageWorkspace() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _imageWorkspace() => ListView(
     children: [
-      _heading(
-        'Image Generation',
-        'Create images and keep your generated work in your library.',
-      ),
-      _card(
-        Column(
-          children: [
-            const TextField(
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: 'Describe the image you want...',
-                border: OutlineInputBorder(),
-              ),
+      _heading('Image Generation',
+          'Describe an image and send the request to the WAYVO service.'),
+      _card(Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _field('image-prompt'),
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Image prompt',
+              hintText: 'Describe the image you want...',
+              border: OutlineInputBorder(),
             ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            ElevatedButton.icon(
+              onPressed: _generatingImage ? null : () async {
+                final prompt = _field('image-prompt').text.trim();
+                if (prompt.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter an image prompt first.')),
+                  );
+                  return;
+                }
+                setState(() {
+                  _generatingImage = true;
+                  _imageStatus = 'Sending request to WAYVO...';
+                  _generatedImageUrl = null;
+                });
+                try {
+                  final response = await dio.post(
+                    '/api/chat/image',
+                    data: {'prompt': prompt},
+                  );
+                  final data = response.data;
+                  String? imageUrl;
+                  if (data is Map) {
+                    imageUrl = (data['image_url'] ?? data['url'] ??
+                        data['image'] ?? data['output_url'])?.toString();
+                  }
+                  if (!mounted) return;
+                  setState(() {
+                    _generatedImageUrl = imageUrl;
+                    _imageStatus = imageUrl != null
+                        ? 'Image response received.'
+                        : 'The service responded, but did not return a recognized image URL: ${data.toString()}';
+                  });
+                } catch (e) {
+                  if (!mounted) return;
+                  setState(() {
+                    _imageStatus =
+                        'Image request failed. The backend may not support image generation yet. Details: $e';
+                  });
+                } finally {
+                  if (mounted) setState(() => _generatingImage = false);
+                }
+              },
+              icon: _generatingImage
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.auto_awesome),
+              label: Text(_generatingImage ? 'Working...' : 'Generate Image'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const FeatureScreen(title: 'Library'),
+                ),
+              ),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: const Text('Open Image Library'),
+            ),
+            OutlinedButton(
+              onPressed: () {
+                final prompt = _field('image-prompt').text.trim();
+                if (prompt.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter a prompt to save.')),
+                  );
+                  return;
+                }
+                _saveEntry('Image prompt');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Use Library to find saved items.')),
+                );
+              },
+              child: const Text('Save Prompt'),
+            ),
+          ]),
+          if (_imageStatus.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            SelectableText(_imageStatus),
+          ],
+          if (_generatedImageUrl != null) ...[
             const SizedBox(height: 16),
-            Row(
-              children: [
-                ElevatedButton(
-                  onPressed: () {},
-                  child: const Text('Generate Image'),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: () {},
-                  child: const Text('Open Image Library'),
-                ),
-              ],
+            Image.network(
+              _generatedImageUrl!,
+              errorBuilder: (_, __, ___) =>
+                  const Text('The returned image URL could not be displayed.'),
             ),
           ],
-        ),
-      ),
+        ],
+      )),
     ],
   );
 
-  Widget _pluginsWorkspace() => Column(
+    Widget _pluginsWorkspace() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Plugins', 'Extend WAYVO with useful tools and services.'),
@@ -3069,10 +3213,22 @@ class _FeatureScreenState extends State<FeatureScreen> {
     leading: const Icon(Icons.extension_outlined),
     title: Text(name),
     subtitle: Text(desc),
-    trailing: Switch(value: false, onChanged: (_) {}),
+    trailing: Switch(
+      value: _pluginEnabled[name] ?? false,
+      onChanged: (enabled) async {
+        setState(() => _pluginEnabled[name] = enabled);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('wayvo_plugin_$name', enabled);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(
+            '$name preference ${enabled ? 'enabled' : 'disabled'}.')),
+        );
+      },
+    ),
   );
 
-  Widget _scheduleWorkspace() => Column(
+    Widget _scheduleWorkspace() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading(
@@ -3110,21 +3266,52 @@ class _FeatureScreenState extends State<FeatureScreen> {
     ],
   );
 
-  Widget _libraryWorkspace() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _libraryWorkspace() => ListView(
     children: [
-      _heading('Library', 'Your saved chats, files, images and documents.'),
-      _card(
-        const ListTile(
-          leading: Icon(Icons.folder_outlined),
-          title: Text('My Library'),
-          subtitle: Text('Saved content will appear here.'),
-        ),
-      ),
+      _heading('Library', 'Your saved chats, notes, projects and content.'),
+      _card(Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('My Library',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          if (_entries.isEmpty)
+            const Text('Nothing saved yet. Save a diary entry, schedule item, project or prompt first.')
+          else
+            ..._entries.map((entry) {
+              final title = entry['title']?.toString() ?? 'Saved item';
+              final body = entry['body']?.toString() ?? '';
+              final date = entry['date']?.toString() ?? '';
+              return ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(title),
+                subtitle: Text(
+                  [body, date].where((v) => v.isNotEmpty).join('\\n'),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                isThreeLine: body.isNotEmpty,
+                trailing: IconButton(
+                  tooltip: 'Copy saved item',
+                  icon: const Icon(Icons.copy),
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: '$title\\n$body'),
+                    );
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Copied to clipboard.')),
+                    );
+                  },
+                ),
+              );
+            }),
+        ],
+      )),
     ],
   );
 
-  Widget _codexWorkspace() => Column(
+    Widget _codexWorkspace() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Codex', 'Your dedicated development workspace.'),
@@ -3213,32 +3400,164 @@ class _FeatureScreenState extends State<FeatureScreen> {
     ],
   );
 
-  Widget _personalizationWorkspace() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _personalizationWorkspace() => ListView(
     children: [
       _heading('Personalization', 'Choose how WAYVO should respond to you.'),
-      _card(
-        Column(
-          children: [
-            SwitchListTile(
-              value: true,
-              onChanged: (_) {},
-              title: const Text('Personalized responses'),
-            ),
-            const ListTile(
-              title: Text('Response style'),
-              subtitle: Text('Choose concise, balanced or detailed'),
-            ),
-            const ListTile(title: Text('Language'), subtitle: Text('English')),
-            const ListTile(
-              title: Text('Tone'),
-              subtitle: Text('Friendly and helpful'),
-            ),
-          ],
+      _card(Column(children: [
+        SwitchListTile(
+          value: _personalizedResponses,
+          onChanged: (value) async {
+            setState(() => _personalizedResponses = value);
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('wayvo_personalized_responses', value);
+          },
+          title: const Text('Personalized responses'),
+          subtitle: const Text('Save your preference on this device.'),
         ),
-      ),
+        ListTile(
+          title: const Text('Response style'),
+          subtitle: Text(_responseStyle),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () async {
+            final value = await showDialog<String>(
+              context: context,
+              builder: (ctx) => SimpleDialog(
+                title: const Text('Response style'),
+                children: ['Concise', 'Balanced', 'Detailed'].map((item) =>
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, item),
+                    child: Text(item),
+                  )).toList(),
+              ),
+            );
+            if (value == null || !mounted) return;
+            setState(() => _responseStyle = value);
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('wayvo_response_style', value);
+          },
+        ),
+        ListTile(
+          title: const Text('Language'),
+          subtitle: Text(_responseLanguage),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () async {
+            final value = await showDialog<String>(
+              context: context,
+              builder: (ctx) => SimpleDialog(
+                title: const Text('Language'),
+                children: ['English', 'Telugu', 'Hindi'].map((item) =>
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, item),
+                    child: Text(item),
+                  )).toList(),
+              ),
+            );
+            if (value == null || !mounted) return;
+            setState(() => _responseLanguage = value);
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('wayvo_response_language', value);
+          },
+        ),
+        ListTile(
+          title: const Text('Tone'),
+          subtitle: Text(_responseTone),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () async {
+            final value = await showDialog<String>(
+              context: context,
+              builder: (ctx) => SimpleDialog(
+                title: const Text('Tone'),
+                children: ['Friendly', 'Professional', 'Casual'].map((item) =>
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, item),
+                    child: Text(item),
+                  )).toList(),
+              ),
+            );
+            if (value == null || !mounted) return;
+            setState(() => _responseTone = value);
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('wayvo_response_tone', value);
+          },
+        ),
+      ])),
     ],
   );
+
+    String _themeModeLabel(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return 'Light';
+      case ThemeMode.dark:
+        return 'Dark';
+      case ThemeMode.system:
+        return 'System';
+    }
+  }
+
+  Future<void> _chooseTheme() async {
+    final selected = await showDialog<ThemeMode>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Choose appearance'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: ThemeMode.values.map((mode) {
+            return RadioListTile<ThemeMode>(
+              value: mode,
+              groupValue: wayvoThemeMode.value,
+              title: Text(_themeModeLabel(mode)),
+              onChanged: (value) {
+                if (value != null) Navigator.pop(dialogContext, value);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+
+    if (selected == null || !mounted) return;
+    wayvoThemeMode.value = selected;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('wayvo_theme_mode', selected.name);
+  }
+
+  void _openSettingsDestination(String destination) {
+    switch (destination) {
+      case 'Chat':
+      case 'Voice':
+        Navigator.pop(context);
+        break;
+      case 'AI & Personalization':
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const FeatureScreen(title: 'Personalization'),
+        ));
+        break;
+      case 'Notifications':
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const FeatureScreen(title: 'Schedule / Interview'),
+        ));
+        break;
+      case 'Privacy & Data':
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const FeatureScreen(title: 'Library'),
+        ));
+        break;
+      case 'Account':
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const FeatureScreen(title: 'Profile / Account'),
+        ));
+        break;
+      case 'About WAYVO':
+        showAboutDialog(
+          context: context,
+          applicationName: 'WAYVO',
+          applicationVersion: '1.0.0',
+          applicationLegalese: 'Instant answers. Zero hassle.',
+        );
+        break;
+    }
+  }
 
   Widget _settingsWorkspace() => ListView(
     children: [
@@ -3246,59 +3565,44 @@ class _FeatureScreenState extends State<FeatureScreen> {
       _card(
         Column(
           children: [
-            const ListTile(
-              leading: Icon(Icons.palette_outlined),
-              title: Text('Appearance'),
-              subtitle: Text('Light, Dark or System theme'),
-              trailing: Icon(Icons.chevron_right),
+            ValueListenableBuilder<ThemeMode>(
+              valueListenable: wayvoThemeMode,
+              builder: (context, mode, _) => ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('Appearance'),
+                subtitle: Text('Current: ${_themeModeLabel(mode)}'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _chooseTheme,
+              ),
             ),
-            const ListTile(
-              leading: Icon(Icons.chat_outlined),
-              title: Text('Chat'),
-              subtitle: Text('Enter to send, auto-save, chat history'),
-              trailing: Icon(Icons.chevron_right),
-            ),
-            const ListTile(
-              leading: Icon(Icons.auto_awesome),
-              title: Text('AI & Personalization'),
-              subtitle: Text('Response style, language and tone'),
-              trailing: Icon(Icons.chevron_right),
-            ),
-            const ListTile(
-              leading: Icon(Icons.mic_none),
-              title: Text('Voice'),
-              subtitle: Text('Voice input, voice responses and speed'),
-              trailing: Icon(Icons.chevron_right),
-            ),
-            const ListTile(
-              leading: Icon(Icons.notifications_outlined),
-              title: Text('Notifications'),
-              subtitle: Text('Schedule and interview reminders'),
-              trailing: Icon(Icons.chevron_right),
-            ),
-            const ListTile(
-              leading: Icon(Icons.lock_outline),
-              title: Text('Privacy & Data'),
-              subtitle: Text('Saved chats, library data and account data'),
-              trailing: Icon(Icons.chevron_right),
-            ),
-            const ListTile(
-              leading: Icon(Icons.person_outline),
-              title: Text('Account'),
-              subtitle: Text('Profile, account details and logout'),
-              trailing: Icon(Icons.chevron_right),
-            ),
-            const ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('About WAYVO'),
-              subtitle: Text('Version, terms, privacy and licenses'),
-              trailing: Icon(Icons.chevron_right),
-            ),
+            _settingsRow(Icons.chat_outlined, 'Chat',
+                'Return to your conversations'),
+            _settingsRow(Icons.auto_awesome, 'AI & Personalization',
+                'Response preferences'),
+            _settingsRow(Icons.mic_none, 'Voice',
+                'Return to chat to use voice controls'),
+            _settingsRow(Icons.notifications_outlined, 'Notifications',
+                'Schedule and interview reminders'),
+            _settingsRow(Icons.lock_outline, 'Privacy & Data',
+                'Open your saved library'),
+            _settingsRow(Icons.person_outline, 'Account',
+                'Profile and account information'),
+            _settingsRow(Icons.info_outline, 'About WAYVO',
+                'Version and app information'),
           ],
         ),
       ),
     ],
   );
+
+  Widget _settingsRow(IconData icon, String title, String subtitle) =>
+      ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _openSettingsDestination(title),
+      );
 
   Widget _helpWorkspace() => ListView(
     children: [
