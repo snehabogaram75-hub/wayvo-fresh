@@ -2725,7 +2725,6 @@ class FeatureScreen extends StatefulWidget {
 class _FeatureScreenState extends State<FeatureScreen> {
   String get title => widget.title;
   final Map<String, TextEditingController> _fields = {};
-  final Map<String, dynamic> _settings = {};
   List<Map<String, dynamic>> _entries = [];
   String _mood = '😊 Happy';
   String _language = 'Python';
@@ -2760,25 +2759,37 @@ class _FeatureScreenState extends State<FeatureScreen> {
   }
 
   Future<void> _saveEntry(String kind) async {
-    final name = _field('$kind-title').text.trim();
-    final body = _field('$kind-body').text.trim();
+    final prefix = kind == 'Diary entry' ? 'diary' : 'schedule';
+    final titleController = _field('$prefix-title');
+    final bodyController = _field('$prefix-body');
+    final name = titleController.text.trim();
+    final body = bodyController.text.trim();
+    final scheduledDate = prefix == 'schedule'
+        ? _field('schedule-date').text.trim()
+        : '';
+
     if (name.isEmpty || body.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter both title and details.')),
       );
       return;
     }
+
     setState(() {
       _entries.insert(0, {
         'title': name,
         'body': body,
         'mood': _mood,
         'date': DateTime.now().toIso8601String(),
+        if (scheduledDate.isNotEmpty) 'scheduledDate': scheduledDate,
       });
     });
+
     await _saveEntries();
-    _field('$kind-title').clear();
-    _field('$kind-body').clear();
+    titleController.clear();
+    bodyController.clear();
+    if (prefix == 'schedule') _field('schedule-date').clear();
+
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text('$kind saved successfully.')));
@@ -2902,6 +2913,19 @@ class _FeatureScreenState extends State<FeatureScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            if (_codeResult.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: SelectableText(_codeResult),
+              ),
+            ],
+            const SizedBox(height: 12),
             Wrap(
               spacing: 10,
               children: ['Explain', 'Debug', 'Translate', 'Optimize']
@@ -3161,10 +3185,11 @@ class _FeatureScreenState extends State<FeatureScreen> {
                   }),
                 );
                 await _saveEntries();
-                if (mounted)
+                if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Project saved.')),
                   );
+                }
               },
               child: const Text('New Project'),
             ),
