@@ -13,7 +13,9 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:share_plus/share_plus.dart';
+
 import 'my_files.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -49,9 +51,7 @@ class WayvoApp extends StatelessWidget {
       title: 'WAYVO',
       theme: ThemeData(
         fontFamily: 'Arial',
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6C63FF),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6C63FF)),
         scaffoldBackgroundColor: const Color(0xFFF8F7F2),
       ),
       home: const AuthScreen(),
@@ -117,10 +117,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
       final response = await dio.post(
         endpoint,
-        data: {
-          'email': email,
-          'password': password,
-        },
+        data: {'email': email, 'password': password},
       );
 
       final data = response.data is String
@@ -135,9 +132,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (_) => const WayvoHome(),
-            ),
+            MaterialPageRoute(builder: (_) => const WayvoHome()),
           );
         } else {
           setState(() {
@@ -148,8 +143,7 @@ class _AuthScreenState extends State<AuthScreen> {
         }
       } else {
         setState(() {
-          errorMessage =
-              data['message'] ?? 'Something went wrong.';
+          errorMessage = data['message'] ?? 'Something went wrong.';
         });
       }
     } on DioException catch (e) {
@@ -187,11 +181,7 @@ class _AuthScreenState extends State<AuthScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFFDF5),
-              Color(0xFFDCEFF7),
-              Color(0xFFB8D8E8),
-            ],
+            colors: [Color(0xFFFFFDF5), Color(0xFFDCEFF7), Color(0xFFB8D8E8)],
           ),
         ),
         child: SafeArea(
@@ -199,21 +189,16 @@ class _AuthScreenState extends State<AuthScreen> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: 430,
-                ),
+                constraints: const BoxConstraints(maxWidth: 430),
                 child: Container(
                   padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.88),
                     borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      color: Colors.white,
-                    ),
+                    border: Border.all(color: Colors.white),
                   ),
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Center(
                         child: SvgPicture.asset(
@@ -238,15 +223,12 @@ class _AuthScreenState extends State<AuthScreen> {
 
                       TextField(
                         controller: emailController,
-                        keyboardType:
-                            TextInputType.emailAddress,
+                        keyboardType: TextInputType.emailAddress,
                         decoration: InputDecoration(
                           labelText: 'Email',
-                          prefixIcon:
-                              const Icon(Icons.email_outlined),
+                          prefixIcon: const Icon(Icons.email_outlined),
                           border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                         ),
                       ),
@@ -258,11 +240,9 @@ class _AuthScreenState extends State<AuthScreen> {
                         obscureText: true,
                         decoration: InputDecoration(
                           labelText: 'Password',
-                          prefixIcon:
-                              const Icon(Icons.lock_outline),
+                          prefixIcon: const Icon(Icons.lock_outline),
                           border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                         ),
                       ),
@@ -273,18 +253,14 @@ class _AuthScreenState extends State<AuthScreen> {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
-                          margin:
-                              const EdgeInsets.only(bottom: 16),
+                          margin: const EdgeInsets.only(bottom: 16),
                           decoration: BoxDecoration(
                             color: const Color(0xFFFFF0F0),
-                            borderRadius:
-                                BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             errorMessage,
-                            style: const TextStyle(
-                              color: Colors.red,
-                            ),
+                            style: const TextStyle(color: Colors.red),
                           ),
                         ),
 
@@ -292,36 +268,28 @@ class _AuthScreenState extends State<AuthScreen> {
                         width: double.infinity,
                         height: 52,
                         child: ElevatedButton(
-                          onPressed:
-                              loading ? null : submit,
+                          onPressed: loading ? null : submit,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                const Color(0xFF17152A),
+                            backgroundColor: const Color(0xFF17152A),
                             foregroundColor: Colors.white,
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
                           child: loading
                               ? const SizedBox(
                                   width: 22,
                                   height: 22,
-                                  child:
-                                      CircularProgressIndicator(
+                                  child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     color: Colors.white,
                                   ),
                                 )
                               : Text(
-                                  isLogin
-                                      ? 'Login'
-                                      : 'Create Account',
+                                  isLogin ? 'Login' : 'Create Account',
                                   style: const TextStyle(
                                     fontSize: 16,
-                                    fontWeight:
-                                        FontWeight.w600,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                         ),
@@ -373,13 +341,11 @@ class _WayvoHomeState extends State<WayvoHome>
     with SingleTickerProviderStateMixin {
   final messageController = TextEditingController();
 
-  final ScrollController scrollController =
-      ScrollController();
+  final ScrollController scrollController = ScrollController();
 
   final ImagePicker imagePicker = ImagePicker();
 
-  final stt.SpeechToText speechToText =
-      stt.SpeechToText();
+  final stt.SpeechToText speechToText = stt.SpeechToText();
 
   final FlutterTts tts = FlutterTts();
   bool voiceMode = false;
@@ -392,10 +358,8 @@ class _WayvoHomeState extends State<WayvoHome>
   )..repeat(reverse: true);
   String voiceLastWords = '';
   bool voiceStarting = false;
-  final ValueNotifier<String> voiceStatus =
-      ValueNotifier<String>('Listening…');
-  final ValueNotifier<String> voiceText =
-      ValueNotifier<String>('');
+  final ValueNotifier<String> voiceStatus = ValueNotifier<String>('Listening…');
+  final ValueNotifier<String> voiceText = ValueNotifier<String>('');
 
   final List<Map<String, String>> messages = [];
 
@@ -430,10 +394,7 @@ class _WayvoHomeState extends State<WayvoHome>
     tts.setCompletionHandler(() {
       if (mounted) setState(() => speaking = false);
       if (mounted && voiceMode) {
-        Future.delayed(
-          const Duration(milliseconds: 500),
-          startVoiceListen,
-        );
+        Future.delayed(const Duration(milliseconds: 500), startVoiceListen);
       }
     });
     tts.setCancelHandler(() {
@@ -598,11 +559,11 @@ class _WayvoHomeState extends State<WayvoHome>
   }
 
   List<dynamic> get visibleChats => chatList.where((c) {
-        final locked = c['locked'] == true;
-        if (showLocked) return locked;
-        if (locked) return false;
-        return (c['archived'] == true) == showArchived;
-      }).toList();
+    final locked = c['locked'] == true;
+    if (showLocked) return locked;
+    if (locked) return false;
+    return (c['archived'] == true) == showArchived;
+  }).toList();
 
   int get headerCount => (showArchived || showLocked) ? 1 : 3;
 
@@ -643,9 +604,8 @@ class _WayvoHomeState extends State<WayvoHome>
 
   Future<void> openMyFiles() async {
     if (historyOpen) setState(() => historyOpen = false);
-    final chatId = await Navigator.of(context).push<int>(
-      MaterialPageRoute(builder: (_) => const MyFilesPage()),
-    );
+    final chatId = await Navigator.of(context)
+        .push<int>(MaterialPageRoute(builder: (_) => const MyFilesPage()));
     if (chatId != null && mounted) {
       await loadChats();
       await openChat(chatId);
@@ -661,9 +621,9 @@ class _WayvoHomeState extends State<WayvoHome>
       icon = Icons.arrow_back;
       label = 'Back to chats';
       onTap = () => setState(() {
-            showArchived = false;
-            showLocked = false;
-          });
+        showArchived = false;
+        showLocked = false;
+      });
     } else if (index == 0) {
       icon = Icons.archive_outlined;
       label = 'Archived';
@@ -715,9 +675,7 @@ class _WayvoHomeState extends State<WayvoHome>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(
-                pinned ? Icons.push_pin_outlined : Icons.push_pin,
-              ),
+              leading: Icon(pinned ? Icons.push_pin_outlined : Icons.push_pin),
               title: Text(pinned ? 'Unpin' : 'Pin'),
               onTap: () => Navigator.pop(ctx, 'pin'),
             ),
@@ -739,10 +697,7 @@ class _WayvoHomeState extends State<WayvoHome>
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text(
-                'Delete',
-                style: TextStyle(color: Colors.red),
-              ),
+              title: const Text('Delete', style: TextStyle(color: Colors.red)),
               onTap: () => Navigator.pop(ctx, 'delete'),
             ),
             const SizedBox(height: 8),
@@ -783,10 +738,7 @@ class _WayvoHomeState extends State<WayvoHome>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -818,9 +770,9 @@ class _WayvoHomeState extends State<WayvoHome>
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not delete chat')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not delete chat')));
       }
     } catch (e) {
       if (!mounted) return;
@@ -884,10 +836,7 @@ class _WayvoHomeState extends State<WayvoHome>
     if (message.isEmpty || sending) return;
 
     setState(() {
-      messages.add({
-        'role': 'You',
-        'content': message,
-      });
+      messages.add({'role': 'You', 'content': message});
 
       sending = true;
       messageController.clear();
@@ -898,13 +847,8 @@ class _WayvoHomeState extends State<WayvoHome>
     try {
       final response = await dio.post(
         '/api/chat',
-        data: {
-          'message': message,
-          'chat_id': currentChatId,
-        },
-        options: Options(
-          contentType: Headers.jsonContentType,
-        ),
+        data: {'message': message, 'chat_id': currentChatId},
+        options: Options(contentType: Headers.jsonContentType),
       );
 
       final data = response.data is String
@@ -917,8 +861,7 @@ class _WayvoHomeState extends State<WayvoHome>
         currentChatId = data['chat_id'] ?? currentChatId;
         messages.add({
           'role': 'WAYVO',
-          'content': data['reply'] ??
-              'I could not generate a response.',
+          'content': data['reply'] ?? 'I could not generate a response.',
         });
       });
 
@@ -937,7 +880,8 @@ class _WayvoHomeState extends State<WayvoHome>
       setState(() {
         messages.add({
           'role': 'WAYVO',
-          'content': e.response?.data?['message'] ??
+          'content':
+              e.response?.data?['message'] ??
               'Could not connect to WAYVO backend.',
         });
       });
@@ -947,8 +891,7 @@ class _WayvoHomeState extends State<WayvoHome>
       setState(() {
         messages.add({
           'role': 'WAYVO',
-          'content':
-              'Something went wrong. Please try again.',
+          'content': 'Something went wrong. Please try again.',
         });
       });
     } finally {
@@ -985,10 +928,7 @@ class _WayvoHomeState extends State<WayvoHome>
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Speech recognition is not available.'),
-        ),
+        const SnackBar(content: Text('Speech recognition is not available.')),
       );
 
       return;
@@ -1007,8 +947,7 @@ class _WayvoHomeState extends State<WayvoHome>
 
         if (result.finalResult && voiceMode) {
           setState(() {
-            messageController.text =
-                result.recognizedWords;
+            messageController.text = result.recognizedWords;
             listening = false;
           });
           if (result.recognizedWords.trim().isNotEmpty) {
@@ -1018,14 +957,10 @@ class _WayvoHomeState extends State<WayvoHome>
         }
 
         setState(() {
-          messageController.text =
-              result.recognizedWords;
+          messageController.text = result.recognizedWords;
 
-          messageController.selection =
-              TextSelection.fromPosition(
-            TextPosition(
-              offset: messageController.text.length,
-            ),
+          messageController.selection = TextSelection.fromPosition(
+            TextPosition(offset: messageController.text.length),
           );
         });
       },
@@ -1087,9 +1022,19 @@ class _WayvoHomeState extends State<WayvoHome>
             children: [
               attachTile(ctx, Icons.photo_camera_outlined, 'Camera', 'camera'),
               const SizedBox(width: 12),
-              attachTile(ctx, Icons.photo_library_outlined, 'Photos', 'gallery'),
+              attachTile(
+                ctx,
+                Icons.photo_library_outlined,
+                'Photos',
+                'gallery',
+              ),
               const SizedBox(width: 12),
-              attachTile(ctx, Icons.insert_drive_file_outlined, 'Files', 'document'),
+              attachTile(
+                ctx,
+                Icons.insert_drive_file_outlined,
+                'Files',
+                'document',
+              ),
               const SizedBox(width: 12),
               attachTile(ctx, Icons.lock_outline, 'One-time', 'onetime'),
             ],
@@ -1115,9 +1060,7 @@ class _WayvoHomeState extends State<WayvoHome>
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
         return SafeArea(
@@ -1127,18 +1070,12 @@ class _WayvoHomeState extends State<WayvoHome>
               ListTile(
                 leading: const Icon(Icons.camera_alt_outlined),
                 title: const Text('Take Photo'),
-                onTap: () => Navigator.pop(
-                  context,
-                  ImageSource.camera,
-                ),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
                 title: const Text('Choose from Gallery'),
-                onTap: () => Navigator.pop(
-                  context,
-                  ImageSource.gallery,
-                ),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
               ),
               const SizedBox(height: 8),
             ],
@@ -1151,7 +1088,6 @@ class _WayvoHomeState extends State<WayvoHome>
       await pickPhoto(source: source);
     }
   }
-
 
   Future<void> pickDocument() async {
     if (sending) return;
@@ -1177,10 +1113,7 @@ class _WayvoHomeState extends State<WayvoHome>
     if (pickedFile == null) return;
 
     setState(() {
-      messages.add({
-        'role': 'You',
-        'content': 'Document: ${pickedFile.name}',
-      });
+      messages.add({'role': 'You', 'content': 'Document: ${pickedFile.name}'});
       sending = true;
     });
 
@@ -1190,12 +1123,8 @@ class _WayvoHomeState extends State<WayvoHome>
       final bytes = await pickedFile.xFile.readAsBytes();
 
       final formData = FormData.fromMap({
-        'file': MultipartFile.fromBytes(
-          bytes,
-          filename: pickedFile.name,
-        ),
-        'message':
-            'Please analyze this document and summarize the important information.',
+        'file': MultipartFile.fromBytes(bytes, filename: pickedFile.name),
+        'message': 'Please analyze this document and summarize the important information.',
         'chat_id': (currentChatId ?? '').toString(),
       });
 
@@ -1213,14 +1142,16 @@ class _WayvoHomeState extends State<WayvoHome>
         setState(() {
           messages.add({
             'role': 'WAYVO',
-            'content': response.data['reply'] ?? 'Document analyzed successfully.',
+            'content':
+                response.data['reply'] ?? 'Document analyzed successfully.',
           });
         });
       } else {
         setState(() {
           messages.add({
             'role': 'WAYVO',
-            'content': response.data['message'] ?? 'Could not analyze the document.',
+            'content':
+                response.data['message'] ?? 'Could not analyze the document.',
           });
         });
       }
@@ -1229,10 +1160,7 @@ class _WayvoHomeState extends State<WayvoHome>
           ? "Upload error: ${e.response?.statusCode ?? "network"} - ${e.response?.data ?? e.message}"
           : "Upload error: $e";
       setState(() {
-        messages.add({
-          'role': 'WAYVO',
-          'content': errorMessage,
-        });
+        messages.add({'role': 'WAYVO', 'content': errorMessage});
       });
     } finally {
       setState(() {
@@ -1245,8 +1173,7 @@ class _WayvoHomeState extends State<WayvoHome>
   Future<void> pickPhoto({ImageSource source = ImageSource.gallery}) async {
     if (sending) return;
 
-    final XFile? image =
-        await imagePicker.pickImage(
+    final XFile? image = await imagePicker.pickImage(
       source: source,
       imageQuality: 85,
     );
@@ -1256,10 +1183,7 @@ class _WayvoHomeState extends State<WayvoHome>
     final file = File(image.path);
 
     setState(() {
-      messages.add({
-        'role': 'You',
-        'content': 'Photo: ${image.name}',
-      });
+      messages.add({'role': 'You', 'content': 'Photo: ${image.name}'});
 
       sending = true;
     });
@@ -1268,21 +1192,15 @@ class _WayvoHomeState extends State<WayvoHome>
 
     try {
       final formData = FormData.fromMap({
-        'image': await MultipartFile.fromFile(
-          file.path,
-          filename: image.name,
-        ),
-        'message':
-            'Please analyze this image and describe what is inside it.',
+        'image': await MultipartFile.fromFile(file.path, filename: image.name),
+        'message': 'Please analyze this image and describe what is inside it.',
         'chat_id': (currentChatId ?? '').toString(),
       });
 
       final response = await dio.post(
         '/api/chat/image',
         data: formData,
-        options: Options(
-          contentType: 'multipart/form-data',
-        ),
+        options: Options(contentType: 'multipart/form-data'),
       );
 
       final data = response.data is String
@@ -1295,8 +1213,7 @@ class _WayvoHomeState extends State<WayvoHome>
         currentChatId = data['chat_id'] ?? currentChatId;
         messages.add({
           'role': 'WAYVO',
-          'content': data['reply'] ??
-              'I could not analyze the image.',
+          'content': data['reply'] ?? 'I could not analyze the image.',
         });
       });
 
@@ -1308,8 +1225,8 @@ class _WayvoHomeState extends State<WayvoHome>
       setState(() {
         messages.add({
           'role': 'WAYVO',
-          'content': e.response?.data?['message'] ??
-              'Could not analyze the image.',
+          'content':
+              e.response?.data?['message'] ?? 'Could not analyze the image.',
         });
       });
     } catch (e) {
@@ -1318,8 +1235,7 @@ class _WayvoHomeState extends State<WayvoHome>
       setState(() {
         messages.add({
           'role': 'WAYVO',
-          'content':
-              'Something went wrong while analyzing the image.',
+          'content': 'Something went wrong while analyzing the image.',
         });
       });
     } finally {
@@ -1360,17 +1276,14 @@ class _WayvoHomeState extends State<WayvoHome>
     final isMobile = width < 800;
 
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF8F7F2),
+      backgroundColor: const Color(0xFFF8F7F2),
       body: SafeArea(
         child: Stack(
           children: [
             Row(
               children: [
                 if (!isMobile) buildSidebar(),
-                Expanded(
-                  child: buildChatArea(isMobile),
-                ),
+                Expanded(child: buildChatArea(isMobile)),
               ],
             ),
 
@@ -1413,11 +1326,7 @@ class _WayvoHomeState extends State<WayvoHome>
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 children: [
-                  _sideItem(
-                    Icons.add,
-                    'New Chat',
-                    onTap: startNewChat,
-                  ),
+                  _sideItem(Icons.add, 'New Chat', onTap: startNewChat),
                   _sideItem(
                     Icons.history,
                     'Chat History',
@@ -1429,7 +1338,10 @@ class _WayvoHomeState extends State<WayvoHome>
                   _sideItem(Icons.code, 'Code'),
                   _sideItem(Icons.book_outlined, 'Diary'),
                   _sideItem(Icons.extension_outlined, 'Plugins'),
-                  _sideItem(Icons.calendar_month_outlined, 'Schedule / Interview'),
+                  _sideItem(
+                    Icons.calendar_month_outlined,
+                    'Schedule / Interview',
+                  ),
                   _sideItem(Icons.folder_outlined, 'Library'),
                   _sideItem(Icons.terminal, 'Codex'),
                   _sideItem(Icons.work_outline, 'Projects'),
@@ -1457,55 +1369,52 @@ class _WayvoHomeState extends State<WayvoHome>
       leading: Icon(icon, color: Colors.white70, size: 20),
       title: Text(
         title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-        ),
+        style: const TextStyle(color: Colors.white, fontSize: 14),
       ),
-      onTap: onTap ?? () async {
-        if (historyOpen) setState(() => historyOpen = false);
-        if (title == 'Log out') {
-          final shouldLogout = await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: const Text('Log out?'),
-              content: const Text(
-                'Are you sure you want to log out of WAYVO?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: const Text('No'),
+      onTap:
+          onTap ??
+          () async {
+            if (historyOpen) setState(() => historyOpen = false);
+            if (title == 'Log out') {
+              final shouldLogout = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: const Text('Log out?'),
+                  content: const Text(
+                    'Are you sure you want to log out of WAYVO?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('No'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: const Text('Yes, Log out'),
+                    ),
+                  ],
                 ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: const Text('Yes, Log out'),
-                ),
-              ],
-            ),
-          );
+              );
 
-          if (shouldLogout != true) return;
+              if (shouldLogout != true) return;
 
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove('email');
-          if (!mounted) return;
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('email');
+              if (!mounted) return;
 
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const AuthScreen()),
-            (route) => false,
-          );
-          return;
-        }
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const AuthScreen()),
+                (route) => false,
+              );
+              return;
+            }
 
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => FeatureScreen(title: title),
-          ),
-        );
-      },
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => FeatureScreen(title: title)),
+            );
+          },
     );
   }
 
@@ -1532,9 +1441,7 @@ class _WayvoHomeState extends State<WayvoHome>
       elevation: 12,
       child: Container(
         width: 290,
-        decoration: const BoxDecoration(
-          color: Color(0xFF17152A),
-        ),
+        decoration: const BoxDecoration(color: Color(0xFF17152A)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1559,10 +1466,7 @@ class _WayvoHomeState extends State<WayvoHome>
                         historyOpen = false;
                       });
                     },
-                    icon: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                    ),
+                    icon: const Icon(Icons.close, color: Colors.white),
                   ),
                 ],
               ),
@@ -1592,8 +1496,7 @@ class _WayvoHomeState extends State<WayvoHome>
                 padding: EdgeInsets.zero,
                 children: [
                   if (mobile) ...menuItems,
-                  if (mobile)
-                    const Divider(color: Colors.white24, height: 20),
+                  if (mobile) const Divider(color: Colors.white24, height: 20),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(20, 4, 20, 6),
                     child: Text(
@@ -1612,10 +1515,7 @@ class _WayvoHomeState extends State<WayvoHome>
                       padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
                       child: Text(
                         'Your conversations will appear here.',
-                        style: TextStyle(
-                          color: Colors.white38,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.white38, fontSize: 13),
                       ),
                     ),
                   for (final c in visibleChats)
@@ -1666,16 +1566,10 @@ class _WayvoHomeState extends State<WayvoHome>
       children: [
         Container(
           height: isMobile ? 56 : 72,
-          padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 12 : 28,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 28),
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.grey.shade200,
-              ),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
           ),
           child: Row(
             children: [
@@ -1689,16 +1583,14 @@ class _WayvoHomeState extends State<WayvoHome>
                   icon: const Icon(Icons.menu),
                 ),
 
-              if (isMobile)
-                const SizedBox(width: 4),
+              if (isMobile) const SizedBox(width: 4),
 
               Expanded(
                 child: Text(
                   isMobile ? 'WAYVO' : 'Personal AI Workspace',
                   style: TextStyle(
                     fontSize: isMobile ? 18 : 17,
-                    fontWeight:
-                        isMobile ? FontWeight.w700 : FontWeight.w600,
+                    fontWeight: isMobile ? FontWeight.w700 : FontWeight.w600,
                     letterSpacing: isMobile ? 1.5 : 0,
                   ),
                 ),
@@ -1716,11 +1608,7 @@ class _WayvoHomeState extends State<WayvoHome>
           ),
         ),
 
-        Expanded(
-          child: messages.isEmpty
-              ? buildWelcome()
-              : buildMessages(),
-        ),
+        Expanded(child: messages.isEmpty ? buildWelcome() : buildMessages()),
 
         buildInputArea(isMobile),
       ],
@@ -1802,7 +1690,10 @@ class _WayvoHomeState extends State<WayvoHome>
                 children: [
                   buildSuggestionCard(Icons.lightbulb_outline, 'Give me ideas'),
                   const SizedBox(width: 10),
-                  buildSuggestionCard(Icons.extension_outlined, 'Solve a problem'),
+                  buildSuggestionCard(
+                    Icons.extension_outlined,
+                    'Solve a problem',
+                  ),
                 ],
               ),
             ],
@@ -1907,10 +1798,7 @@ class _WayvoHomeState extends State<WayvoHome>
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(note),
-        duration: const Duration(seconds: 1),
-      ),
+      SnackBar(content: Text(note), duration: const Duration(seconds: 1)),
     );
   }
 
@@ -2048,10 +1936,7 @@ class _WayvoHomeState extends State<WayvoHome>
           final oneTimeReply = data['reply'];
           if (oneTimeReply != null &&
               oneTimeReply.toString().trim().isNotEmpty) {
-            messages.add({
-              'role': 'WAYVO',
-              'content': oneTimeReply.toString(),
-            });
+            messages.add({'role': 'WAYVO', 'content': oneTimeReply.toString()});
           }
         });
         scrollToBottom();
@@ -2066,9 +1951,7 @@ class _WayvoHomeState extends State<WayvoHome>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            (e.response?.data is Map
-                    ? e.response?.data['message']
-                    : null) ??
+            (e.response?.data is Map ? e.response?.data['message'] : null) ??
                 'Upload failed. Try again.',
           ),
         ),
@@ -2084,8 +1967,9 @@ class _WayvoHomeState extends State<WayvoHome>
     final parts = raw.replaceAll('[[', '').replaceAll(']]', '').split(':');
     final id = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
     final kind = parts.length > 2 ? parts[2] : 'text';
-    final label =
-        kind == 'image' ? 'Photo' : (kind == 'file' ? 'File' : 'Message');
+    final label = kind == 'image'
+        ? 'Photo'
+        : (kind == 'file' ? 'File' : 'Message');
     return Align(
       alignment: Alignment.centerRight,
       child: InkWell(
@@ -2108,9 +1992,7 @@ class _WayvoHomeState extends State<WayvoHome>
               ),
               const SizedBox(width: 8),
               Text(
-                opened
-                    ? 'Opened · $label'
-                    : 'One-time $label · Tap to open',
+                opened ? 'Opened · $label' : 'One-time $label · Tap to open',
                 style: TextStyle(
                   fontSize: 14,
                   color: opened ? Colors.black45 : Colors.white,
@@ -2164,9 +2046,8 @@ class _WayvoHomeState extends State<WayvoHome>
         setState(() {
           messages[index]['content'] = '[[ONETIME_OPENED:$itemId:$kind]]';
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Already opened')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Already opened')));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not open. Try again.')),
@@ -2196,13 +2077,20 @@ class _WayvoHomeState extends State<WayvoHome>
       );
     } else if (kind == 'file' && bytes != null) {
       final lower = filename.toLowerCase();
-      final textLike = ['.txt', '.md', '.csv', '.json', '.xml', '.log']
-          .any((e) => lower.endsWith(e));
+      final textLike = [
+        '.txt',
+        '.md',
+        '.csv',
+        '.json',
+        '.xml',
+        '.log',
+      ].any((e) => lower.endsWith(e));
       String body;
       if (textLike) {
         body = utf8.decode(bytes, allowMalformed: true);
       } else {
-        body = '$filename\n\n${(bytes.length / 1024).toStringAsFixed(1)} KB\n\n'
+        body =
+            '$filename\n\n${(bytes.length / 1024).toStringAsFixed(1)} KB\n\n'
             'Preview not available for this file type.';
       }
       content = Center(
@@ -2239,8 +2127,11 @@ class _WayvoHomeState extends State<WayvoHome>
                 padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
                 child: Row(
                   children: [
-                    const Icon(Icons.lock_outline,
-                        color: Colors.white70, size: 18),
+                    const Icon(
+                      Icons.lock_outline,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
@@ -2271,8 +2162,7 @@ class _WayvoHomeState extends State<WayvoHome>
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
       physics: const BouncingScrollPhysics(),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (messages.isNotEmpty)
             Align(
@@ -2288,64 +2178,49 @@ class _WayvoHomeState extends State<WayvoHome>
                 label: const Text('Copy all'),
               ),
             ),
-          ...List.generate(
-          messages.length,
-          (index) {
+          ...List.generate(messages.length, (index) {
             final message = messages[index];
-            final isUser =
-                message['role'] == 'You';
+            final isUser = message['role'] == 'You';
 
             if ((message['content'] ?? '').startsWith('[[ONETIME')) {
               return buildOneTimeBubble(index, message);
             }
 
             return Align(
-              alignment: isUser
-                  ? Alignment.centerRight
-                  : Alignment.centerLeft,
+              alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
               child: Container(
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width < 800
                       ? MediaQuery.of(context).size.width * 0.86
                       : 650,
                 ),
-                margin:
-                    const EdgeInsets.only(bottom: 14),
-                padding:
-                    const EdgeInsets.symmetric(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: isUser
-                      ? const Color(0xFF17152A)
-                      : Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(18),
+                  color: isUser ? const Color(0xFF17152A) : Colors.white,
+                  borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: isUser
-                        ? Colors.transparent
-                        : Colors.grey.shade200,
+                    color: isUser ? Colors.transparent : Colors.grey.shade200,
                   ),
                 ),
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SelectableText(
                       message['content'] ?? '',
                       contextMenuBuilder: (ctx, editableTextState) =>
                           wayvoSelectionMenu(
-                        ctx,
-                        editableTextState,
-                        message['content'] ?? '',
-                      ),
+                            ctx,
+                            editableTextState,
+                            message['content'] ?? '',
+                          ),
                       style: TextStyle(
                         fontSize: 15,
                         height: 1.4,
-                        color: isUser
-                            ? Colors.white
-                            : Colors.black87,
+                        color: isUser ? Colors.white : Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -2355,8 +2230,7 @@ class _WayvoHomeState extends State<WayvoHome>
                         if (isUser)
                           InkWell(
                             borderRadius: BorderRadius.circular(8),
-                            onTap: () =>
-                                editMessage(message['content'] ?? ''),
+                            onTap: () => editMessage(message['content'] ?? ''),
                             child: const Padding(
                               padding: EdgeInsets.all(4),
                               child: Icon(
@@ -2369,18 +2243,14 @@ class _WayvoHomeState extends State<WayvoHome>
                         if (isUser) const SizedBox(width: 6),
                         InkWell(
                           borderRadius: BorderRadius.circular(8),
-                          onTap: () => copyText(
-                            message['content'] ?? '',
-                            'Copied',
-                          ),
+                          onTap: () =>
+                              copyText(message['content'] ?? '', 'Copied'),
                           child: Padding(
                             padding: const EdgeInsets.all(4),
                             child: Icon(
                               Icons.copy_rounded,
                               size: 16,
-                              color: isUser
-                                  ? Colors.white54
-                                  : Colors.black38,
+                              color: isUser ? Colors.white54 : Colors.black38,
                             ),
                           ),
                         ),
@@ -2388,8 +2258,7 @@ class _WayvoHomeState extends State<WayvoHome>
                         if (!isUser)
                           InkWell(
                             borderRadius: BorderRadius.circular(8),
-                            onTap: () =>
-                                shareText(message['content'] ?? ''),
+                            onTap: () => shareText(message['content'] ?? ''),
                             child: const Padding(
                               padding: EdgeInsets.all(4),
                               child: Icon(
@@ -2405,8 +2274,7 @@ class _WayvoHomeState extends State<WayvoHome>
                 ),
               ),
             );
-          },
-        ),
+          }),
           if (sending) buildThinkingBubble(),
         ],
       ),
@@ -2421,10 +2289,8 @@ class _WayvoHomeState extends State<WayvoHome>
       letterSpacing: 4,
       height: 1.1,
     );
-    final dots =
-        '.' * (1 + (DateTime.now().millisecondsSinceEpoch ~/ 450) % 3);
-    final pulseOpacity =
-        0.4 + 0.6 * (fill < 0.5 ? fill * 2 : (1 - fill) * 2);
+    final dots = '.' * (1 + (DateTime.now().millisecondsSinceEpoch ~/ 450) % 3);
+    final pulseOpacity = 0.4 + 0.6 * (fill < 0.5 ? fill * 2 : (1 - fill) * 2);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -2461,10 +2327,7 @@ class _WayvoHomeState extends State<WayvoHome>
               Flexible(
                 child: Text(
                   label.replaceAll('…', '') + dots,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.black54,
-                  ),
+                  style: const TextStyle(fontSize: 14, color: Colors.black54),
                 ),
               ),
             ],
@@ -2476,8 +2339,9 @@ class _WayvoHomeState extends State<WayvoHome>
 
   Widget buildThinkingBubble() {
     waitStart ??= DateTime.now();
-    final lastText =
-        messages.isNotEmpty ? (messages.last['content'] ?? '') : '';
+    final lastText = messages.isNotEmpty
+        ? (messages.last['content'] ?? '')
+        : '';
     final isDoc = lastText.startsWith('Document: ');
     return Align(
       alignment: Alignment.centerLeft,
@@ -2572,10 +2436,7 @@ class _WayvoHomeState extends State<WayvoHome>
                 Flexible(
                   child: Text(
                     label,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.black54,
-                    ),
+                    style: const TextStyle(fontSize: 14, color: Colors.black54),
                   ),
                 ),
               ],
@@ -2701,10 +2562,7 @@ class _WayvoHomeState extends State<WayvoHome>
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.black54,
-                  ),
+                  style: const TextStyle(fontSize: 14, color: Colors.black54),
                 ),
               ),
             ),
@@ -2856,11 +2714,83 @@ class _WayvoHomeState extends State<WayvoHome>
   }
 }
 
-
-
-class FeatureScreen extends StatelessWidget {
+class FeatureScreen extends StatefulWidget {
   final String title;
   const FeatureScreen({super.key, required this.title});
+
+  @override
+  State<FeatureScreen> createState() => _FeatureScreenState();
+}
+
+class _FeatureScreenState extends State<FeatureScreen> {
+  String get title => widget.title;
+  final Map<String, TextEditingController> _fields = {};
+  final Map<String, dynamic> _settings = {};
+  List<Map<String, dynamic>> _entries = [];
+  String _mood = '😊 Happy';
+  String _language = 'Python';
+  bool _loading = true;
+  String _codeResult = '';
+
+  TextEditingController _field(String key) =>
+      _fields.putIfAbsent(key, () => TextEditingController());
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSaved();
+  }
+
+  Future<void> _loadSaved() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _entries = (jsonDecode(
+        prefs.getString('wayvo_feature_$title') ?? '[]',
+      ) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      _mood = prefs.getString('wayvo_diary_mood') ?? '😊 Happy';
+      _language = prefs.getString('wayvo_code_language') ?? 'Python';
+      _loading = false;
+    });
+  }
+
+  Future<void> _saveEntries() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('wayvo_feature_$title', jsonEncode(_entries));
+  }
+
+  Future<void> _saveEntry(String kind) async {
+    final name = _field('$kind-title').text.trim();
+    final body = _field('$kind-body').text.trim();
+    if (name.isEmpty || body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter both title and details.')),
+      );
+      return;
+    }
+    setState(() {
+      _entries.insert(0, {
+        'title': name,
+        'body': body,
+        'mood': _mood,
+        'date': DateTime.now().toIso8601String(),
+      });
+    });
+    await _saveEntries();
+    _field('$kind-title').clear();
+    _field('$kind-body').clear();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$kind saved successfully.')));
+  }
+
+  @override
+  void dispose() {
+    for (final c in _fields.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2874,7 +2804,9 @@ class FeatureScreen extends StatelessWidget {
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
-        child: _workspace(context),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _workspace(context),
       ),
     );
   }
@@ -2913,7 +2845,10 @@ class FeatureScreen extends StatelessWidget {
   Widget _heading(String text, String subtitle) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(text, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+      Text(
+        text,
+        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+      ),
       const SizedBox(height: 6),
       Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 15)),
       const SizedBox(height: 24),
@@ -2928,32 +2863,71 @@ class FeatureScreen extends StatelessWidget {
   Widget _codeWorkspace() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _heading('WAYVO Code', 'Write, explain, debug, translate and improve code.'),
-      _card(Column(
-        children: [
-          DropdownButtonFormField<String>(
-            initialValue: 'Python',
-            decoration: const InputDecoration(labelText: 'Programming language'),
-            items: ['Python','C','C++','Java','JavaScript','Dart','SQL','HTML/CSS']
-                .map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
-            onChanged: (_) {},
-          ),
-          const SizedBox(height: 16),
-          const TextField(
-            maxLines: 12,
-            decoration: InputDecoration(
-              hintText: 'Write or paste your code here...',
-              border: OutlineInputBorder(),
+      _heading(
+        'WAYVO Code',
+        'Write, explain, debug, translate and improve code.',
+      ),
+      _card(
+        Column(
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _language,
+              decoration: const InputDecoration(
+                labelText: 'Programming language',
+              ),
+              items: [
+                'Python',
+                'C',
+                'C++',
+                'Java',
+                'JavaScript',
+                'Dart',
+                'SQL',
+                'HTML/CSS',
+              ].map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _language = v);
+                SharedPreferences.getInstance().then(
+                  (p) => p.setString('wayvo_code_language', v ?? 'Python'),
+                );
+              },
             ),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            children: ['Explain','Debug','Translate','Optimize']
-                .map((x) => ElevatedButton(onPressed: () {}, child: Text(x))).toList(),
-          ),
-        ],
-      )),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _field('code-body'),
+              maxLines: 12,
+              decoration: InputDecoration(
+                hintText: 'Write or paste your code here...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              children: ['Explain', 'Debug', 'Translate', 'Optimize']
+                  .map(
+                    (x) => ElevatedButton(
+                      onPressed: () {
+                        final code = _field('code-body').text.trim();
+                        if (code.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Enter code first.')),
+                          );
+                          return;
+                        }
+                        setState(
+                          () => _codeResult =
+                              '$x selected for $_language. Connect WAYVO AI backend to process this code.\n\n$code',
+                        );
+                      },
+                      child: Text(x),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
     ],
   );
 
@@ -2961,55 +2935,91 @@ class FeatureScreen extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('My Diary', 'Write, save and revisit your personal entries.'),
-      _card(Column(
-        children: [
-          const TextField(decoration: InputDecoration(labelText: 'Entry title')),
-          const SizedBox(height: 16),
-          const TextField(
-            maxLines: 14,
-            decoration: InputDecoration(
-              hintText: 'Dear Diary...',
-              border: OutlineInputBorder(),
+      _card(
+        Column(
+          children: [
+            TextField(
+              controller: _field('diary-title'),
+              decoration: const InputDecoration(labelText: 'Entry title'),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(children: [
-            const Text('Mood: '),
-            DropdownButton<String>(
-              value: '😊 Happy',
-              items: ['😊 Happy','😌 Calm','😐 Normal','😔 Sad','🤩 Excited']
-                  .map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
-              onChanged: (_) {},
+            const SizedBox(height: 16),
+            TextField(
+              controller: _field('diary-body'),
+              maxLines: 14,
+              decoration: InputDecoration(
+                hintText: 'Dear Diary...',
+                border: OutlineInputBorder(),
+              ),
             ),
-            const Spacer(),
-            ElevatedButton(onPressed: () {}, child: const Text('Save Entry')),
-          ]),
-        ],
-      )),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Text('Mood: '),
+                DropdownButton<String>(
+                  value: _mood,
+                  items:
+                      [
+                            '😊 Happy',
+                            '😌 Calm',
+                            '😐 Normal',
+                            '😔 Sad',
+                            '🤩 Excited',
+                          ]
+                          .map(
+                            (x) => DropdownMenuItem(value: x, child: Text(x)),
+                          )
+                          .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _mood = v);
+                  },
+                ),
+                const Spacer(),
+                ElevatedButton(
+                  onPressed: () => _saveEntry('Diary entry'),
+                  child: const Text('Save Entry'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     ],
   );
 
   Widget _imageWorkspace() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _heading('Image Generation', 'Create images and keep your generated work in your library.'),
-      _card(Column(
-        children: [
-          const TextField(
-            maxLines: 4,
-            decoration: InputDecoration(
-              hintText: 'Describe the image you want...',
-              border: OutlineInputBorder(),
+      _heading(
+        'Image Generation',
+        'Create images and keep your generated work in your library.',
+      ),
+      _card(
+        Column(
+          children: [
+            const TextField(
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: 'Describe the image you want...',
+                border: OutlineInputBorder(),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(children: [
-            ElevatedButton(onPressed: () {}, child: const Text('Generate Image')),
-            const SizedBox(width: 12),
-            OutlinedButton(onPressed: () {}, child: const Text('Open Image Library')),
-          ]),
-        ],
-      )),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                ElevatedButton(
+                  onPressed: () {},
+                  child: const Text('Generate Image'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton(
+                  onPressed: () {},
+                  child: const Text('Open Image Library'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     ],
   );
 
@@ -3017,15 +3027,17 @@ class FeatureScreen extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Plugins', 'Extend WAYVO with useful tools and services.'),
-      _card(Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _pluginRow('Web Search', 'Find current information on the web.'),
-          _pluginRow('File Tools', 'Work with uploaded documents.'),
-          _pluginRow('Calendar', 'Plan and organize events.'),
-          _pluginRow('Productivity', 'Help with everyday tasks.'),
-        ],
-      )),
+      _card(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _pluginRow('Web Search', 'Find current information on the web.'),
+            _pluginRow('File Tools', 'Work with uploaded documents.'),
+            _pluginRow('Calendar', 'Plan and organize events.'),
+            _pluginRow('Productivity', 'Help with everyday tasks.'),
+          ],
+        ),
+      ),
     ],
   );
 
@@ -3039,21 +3051,38 @@ class FeatureScreen extends StatelessWidget {
   Widget _scheduleWorkspace() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _heading('Schedule / Interview', 'Plan interviews, events, tasks and important dates.'),
-      _card(Column(
-        children: [
-          const TextField(decoration: InputDecoration(labelText: 'Schedule title')),
-          const SizedBox(height: 12),
-          const TextField(decoration: InputDecoration(labelText: 'Date and time')),
-          const SizedBox(height: 12),
-          const TextField(
-            maxLines: 4,
-            decoration: InputDecoration(labelText: 'Details / preparation notes'),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(onPressed: () {}, child: const Text('Add to Schedule')),
-        ],
-      )),
+      _heading(
+        'Schedule / Interview',
+        'Plan interviews, events, tasks and important dates.',
+      ),
+      _card(
+        Column(
+          children: [
+            TextField(
+              controller: _field('schedule-title'),
+              decoration: const InputDecoration(labelText: 'Schedule title'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _field('schedule-date'),
+              decoration: const InputDecoration(labelText: 'Date and time'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _field('schedule-body'),
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Details / preparation notes',
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _saveEntry('Schedule item'),
+              child: const Text('Add to Schedule'),
+            ),
+          ],
+        ),
+      ),
     ],
   );
 
@@ -3061,11 +3090,13 @@ class FeatureScreen extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Library', 'Your saved chats, files, images and documents.'),
-      _card(const ListTile(
-        leading: Icon(Icons.folder_outlined),
-        title: Text('My Library'),
-        subtitle: Text('Saved content will appear here.'),
-      )),
+      _card(
+        const ListTile(
+          leading: Icon(Icons.folder_outlined),
+          title: Text('My Library'),
+          subtitle: Text('Saved content will appear here.'),
+        ),
+      ),
     ],
   );
 
@@ -3073,13 +3104,15 @@ class FeatureScreen extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Codex', 'Your dedicated development workspace.'),
-      _card(const TextField(
-        maxLines: 18,
-        decoration: InputDecoration(
-          hintText: 'Start a coding task or project...',
-          border: OutlineInputBorder(),
+      _card(
+        const TextField(
+          maxLines: 18,
+          decoration: InputDecoration(
+            hintText: 'Start a coding task or project...',
+            border: OutlineInputBorder(),
+          ),
         ),
-      )),
+      ),
     ],
   );
 
@@ -3087,12 +3120,57 @@ class FeatureScreen extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Projects', 'Keep related chats, files and tasks together.'),
-      _card(Row(
-        children: [
-          const Expanded(child: Text('Create a new project')),
-          ElevatedButton(onPressed: () {}, child: const Text('New Project')),
-        ],
-      )),
+      _card(
+        Row(
+          children: [
+            const Expanded(child: Text('Create a new project')),
+            ElevatedButton(
+              onPressed: () async {
+                final name = await showDialog<String>(
+                  context: context,
+                  builder: (ctx) {
+                    final c = TextEditingController();
+                    return AlertDialog(
+                      title: const Text('New project'),
+                      content: TextField(
+                        controller: c,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Project name',
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, c.text.trim()),
+                          child: const Text('Create'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+                if (name == null || name.isEmpty) return;
+                setState(
+                  () => _entries.insert(0, {
+                    'title': name,
+                    'body': 'Project created',
+                    'date': DateTime.now().toIso8601String(),
+                  }),
+                );
+                await _saveEntries();
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Project saved.')),
+                  );
+              },
+              child: const Text('New Project'),
+            ),
+          ],
+        ),
+      ),
     ],
   );
 
@@ -3100,11 +3178,13 @@ class FeatureScreen extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Profile / Account', 'Manage your WAYVO account.'),
-      _card(const ListTile(
-        leading: CircleAvatar(child: Icon(Icons.person)),
-        title: Text('Your Profile'),
-        subtitle: Text('Account information and profile settings'),
-      )),
+      _card(
+        const ListTile(
+          leading: CircleAvatar(child: Icon(Icons.person)),
+          title: Text('Your Profile'),
+          subtitle: Text('Account information and profile settings'),
+        ),
+      ),
     ],
   );
 
@@ -3112,173 +3192,197 @@ class FeatureScreen extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Personalization', 'Choose how WAYVO should respond to you.'),
-      _card(Column(
-        children: [
-          SwitchListTile(value: true, onChanged: (_) {}, title: const Text('Personalized responses')),
-          const ListTile(title: Text('Response style'), subtitle: Text('Choose concise, balanced or detailed')),
-          const ListTile(title: Text('Language'), subtitle: Text('English')),
-          const ListTile(title: Text('Tone'), subtitle: Text('Friendly and helpful')),
-        ],
-      )),
+      _card(
+        Column(
+          children: [
+            SwitchListTile(
+              value: true,
+              onChanged: (_) {},
+              title: const Text('Personalized responses'),
+            ),
+            const ListTile(
+              title: Text('Response style'),
+              subtitle: Text('Choose concise, balanced or detailed'),
+            ),
+            const ListTile(title: Text('Language'), subtitle: Text('English')),
+            const ListTile(
+              title: Text('Tone'),
+              subtitle: Text('Friendly and helpful'),
+            ),
+          ],
+        ),
+      ),
     ],
   );
 
   Widget _settingsWorkspace() => ListView(
     children: [
       _heading('Settings', 'Manage your WAYVO experience.'),
-      _card(Column(
-        children: [
-          const ListTile(
-            leading: Icon(Icons.palette_outlined),
-            title: Text('Appearance'),
-            subtitle: Text('Light, Dark or System theme'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-          const ListTile(
-            leading: Icon(Icons.chat_outlined),
-            title: Text('Chat'),
-            subtitle: Text('Enter to send, auto-save, chat history'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-          const ListTile(
-            leading: Icon(Icons.auto_awesome),
-            title: Text('AI & Personalization'),
-            subtitle: Text('Response style, language and tone'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-          const ListTile(
-            leading: Icon(Icons.mic_none),
-            title: Text('Voice'),
-            subtitle: Text('Voice input, voice responses and speed'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-          const ListTile(
-            leading: Icon(Icons.notifications_outlined),
-            title: Text('Notifications'),
-            subtitle: Text('Schedule and interview reminders'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-          const ListTile(
-            leading: Icon(Icons.lock_outline),
-            title: Text('Privacy & Data'),
-            subtitle: Text('Saved chats, library data and account data'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-          const ListTile(
-            leading: Icon(Icons.person_outline),
-            title: Text('Account'),
-            subtitle: Text('Profile, account details and logout'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-          const ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('About WAYVO'),
-            subtitle: Text('Version, terms, privacy and licenses'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-        ],
-      )),
+      _card(
+        Column(
+          children: [
+            const ListTile(
+              leading: Icon(Icons.palette_outlined),
+              title: Text('Appearance'),
+              subtitle: Text('Light, Dark or System theme'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+            const ListTile(
+              leading: Icon(Icons.chat_outlined),
+              title: Text('Chat'),
+              subtitle: Text('Enter to send, auto-save, chat history'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+            const ListTile(
+              leading: Icon(Icons.auto_awesome),
+              title: Text('AI & Personalization'),
+              subtitle: Text('Response style, language and tone'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+            const ListTile(
+              leading: Icon(Icons.mic_none),
+              title: Text('Voice'),
+              subtitle: Text('Voice input, voice responses and speed'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+            const ListTile(
+              leading: Icon(Icons.notifications_outlined),
+              title: Text('Notifications'),
+              subtitle: Text('Schedule and interview reminders'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+            const ListTile(
+              leading: Icon(Icons.lock_outline),
+              title: Text('Privacy & Data'),
+              subtitle: Text('Saved chats, library data and account data'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+            const ListTile(
+              leading: Icon(Icons.person_outline),
+              title: Text('Account'),
+              subtitle: Text('Profile, account details and logout'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+            const ListTile(
+              leading: Icon(Icons.info_outline),
+              title: Text('About WAYVO'),
+              subtitle: Text('Version, terms, privacy and licenses'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+          ],
+        ),
+      ),
     ],
   );
 
   Widget _helpWorkspace() => ListView(
     children: [
-      _heading('Help & Support', 'Find answers or contact the WAYVO team directly.'),
-      _card(Column(
-        children: [
-          const TextField(
-            decoration: InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              hintText: 'Search help...',
-              border: OutlineInputBorder(),
+      _heading(
+        'Help & Support',
+        'Find answers or contact the WAYVO team directly.',
+      ),
+      _card(
+        Column(
+          children: [
+            const TextField(
+              decoration: InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search help...',
+                border: OutlineInputBorder(),
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          const ListTile(
-            leading: Icon(Icons.chat_outlined),
-            title: Text('How do I start a new chat?'),
-            subtitle: Text('Use New Chat from the sidebar.'),
-          ),
-          const ListTile(
-            leading: Icon(Icons.auto_awesome),
-            title: Text('How do I generate an image?'),
-            subtitle: Text('Open Image Generation and enter your prompt.'),
-          ),
-          const ListTile(
-            leading: Icon(Icons.code),
-            title: Text('How do I use Code?'),
-            subtitle: Text('Choose a programming language and enter your code.'),
-          ),
-          const ListTile(
-            leading: Icon(Icons.folder_outlined),
-            title: Text('How does Library work?'),
-            subtitle: Text('Your saved content will be organized there.'),
-          ),
-          const ListTile(
-            leading: Icon(Icons.work_outline),
-            title: Text('How do Projects work?'),
-            subtitle: Text('Group related chats, files and tasks together.'),
-          ),
-          const ListTile(
-            leading: Icon(Icons.share_outlined),
-            title: Text('How do I share a chat?'),
-            subtitle: Text('Use the Share option from a conversation.'),
-          ),
-        ],
-      )),
+            const SizedBox(height: 18),
+            const ListTile(
+              leading: Icon(Icons.chat_outlined),
+              title: Text('How do I start a new chat?'),
+              subtitle: Text('Use New Chat from the sidebar.'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.auto_awesome),
+              title: Text('How do I generate an image?'),
+              subtitle: Text('Open Image Generation and enter your prompt.'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.code),
+              title: Text('How do I use Code?'),
+              subtitle: Text(
+                'Choose a programming language and enter your code.',
+              ),
+            ),
+            const ListTile(
+              leading: Icon(Icons.folder_outlined),
+              title: Text('How does Library work?'),
+              subtitle: Text('Your saved content will be organized there.'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.work_outline),
+              title: Text('How do Projects work?'),
+              subtitle: Text('Group related chats, files and tasks together.'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.share_outlined),
+              title: Text('How do I share a chat?'),
+              subtitle: Text('Use the Share option from a conversation.'),
+            ),
+          ],
+        ),
+      ),
       const SizedBox(height: 18),
-      _card(Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Quick Tips',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          const Text('• Use New Chat for a fresh conversation.'),
-          const Text('• Use Chat History to find previous conversations.'),
-          const Text('• Use Library to manage saved content.'),
-          const Text('• Use Projects to organize related work.'),
-          const Text('• Use Personalization to customize WAYVO.'),
-        ],
-      )),
+      _card(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Quick Tips',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            const Text('• Use New Chat for a fresh conversation.'),
+            const Text('• Use Chat History to find previous conversations.'),
+            const Text('• Use Library to manage saved content.'),
+            const Text('• Use Projects to organize related work.'),
+            const Text('• Use Personalization to customize WAYVO.'),
+          ],
+        ),
+      ),
       const SizedBox(height: 18),
-      _card(Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Need more help?',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Contact the WAYVO team directly for support, bug reports or suggestions.',
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.email_outlined),
-                label: const Text('Contact Support'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.bug_report_outlined),
-                label: const Text('Report a Problem'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.lightbulb_outline),
-                label: const Text('Suggest an Improvement'),
-              ),
-            ],
-          ),
-        ],
-      )),
+      _card(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Need more help?',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Contact the WAYVO team directly for support, bug reports or suggestions.',
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.email_outlined),
+                  label: const Text('Contact Support'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.bug_report_outlined),
+                  label: const Text('Report a Problem'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.lightbulb_outline),
+                  label: const Text('Suggest an Improvement'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     ],
   );
-
 }
