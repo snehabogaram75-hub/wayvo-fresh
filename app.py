@@ -919,7 +919,14 @@ WAYVO:
         max_tokens=max_toks
     )
 
-    reply = response.choices[0].message.content
+    choice = response.choices[0]
+    reply = choice.message.content
+    print("GROQ DIAGNOSTIC:", {
+        "finish_reason": choice.finish_reason,
+        "content_is_none": reply is None,
+        "content_length": len(reply) if reply else 0,
+        "usage": str(response.usage),
+    })
     if not reply or not reply.strip():
         print("GROQ ERROR: Empty response content")
         return "I couldn't generate an answer just now. Please try your question again."
