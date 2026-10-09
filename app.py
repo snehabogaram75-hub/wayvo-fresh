@@ -765,9 +765,18 @@ _YEAR_RE = re.compile(r"\b20(?:2[4-9])\b")
 
 
 def needs_live_info(message):
-    # WAYVO uses web search by default for user information requests.
-    # This prevents outdated or missing-live-information responses.
-    return bool(message and message.strip())
+    """Search only for current information or explicit web-search requests."""
+    if not message or not message.strip():
+        return False
+
+    text = message.strip()
+    explicit_search = re.search(
+        r"\b(?:search (?:the )?(?:web|internet|online)|"
+        r"look up online|find online|browse the web|search for)\b",
+        text,
+        re.I,
+    )
+    return bool(_LIVE_RE.search(text) or _YEAR_RE.search(text) or explicit_search)
 
 
 def build_live_block(message):
@@ -910,7 +919,11 @@ WAYVO:
         max_tokens=max_toks
     )
 
-    return response.choices[0].message.content.strip()
+    reply = response.choices[0].message.content
+    if not reply or not reply.strip():
+        print("GROQ ERROR: Empty response content")
+        return "I couldn't generate an answer just now. Please try your question again."
+    return reply.strip()
 
 
 def sync_chat(requested_id):
