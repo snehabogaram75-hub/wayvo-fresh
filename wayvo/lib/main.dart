@@ -44,6 +44,18 @@ void main() async {
     (mode) => mode.name == savedTheme,
     orElse: () => ThemeMode.light,
   );
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        final p = await SharedPreferences.getInstance();
+        final tok = p.getString('token');
+        if (tok != null && tok.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $tok';
+        }
+        handler.next(options);
+      },
+    ),
+  );
   runApp(const WayvoApp());
 }
 
@@ -153,6 +165,9 @@ class _AuthScreenState extends State<AuthScreen> {
         if (isLogin) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString("email", email);
+          if (data['token'] != null) {
+            await prefs.setString('token', data['token'].toString());
+          }
           if (!mounted) return;
 
           Navigator.pushReplacement(
@@ -566,6 +581,7 @@ class _WayvoHomeState extends State<WayvoHome>
       if (mounted && data['success'] == false) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('email');
+        await prefs.remove('token');
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
@@ -1427,6 +1443,7 @@ class _WayvoHomeState extends State<WayvoHome>
 
               final prefs = await SharedPreferences.getInstance();
               await prefs.remove('email');
+        await prefs.remove('token');
               if (!mounted) return;
 
               Navigator.pushAndRemoveUntil(

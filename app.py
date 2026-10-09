@@ -824,6 +824,36 @@ def delete_all_chats():
     return jsonify({"success": True})
 
 
+def _token_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(app.secret_key, salt="wayvo-token")
+
+
+@app.before_request
+def token_auth():
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer ") and "user_id" not in session:
+        try:
+            data = _token_serializer().loads(h[7:], max_age=60 * 60 * 24 * 30)
+            session["user_id"] = data["uid"]
+        except Exception:
+            pass
+
+
+@app.after_request
+def add_auth_token(resp):
+    try:
+        if request.path == "/login" and request.method == "POST" and resp.status_code == 200 and session.get("user_id"):
+            import json as _json
+            body = resp.get_json(silent=True)
+            if isinstance(body, dict) and body.get("success") is True:
+                body["token"] = _token_serializer().dumps({"uid": session["user_id"]})
+                resp.set_data(_json.dumps(body))
+    except Exception as e:
+        print("TOKEN ERROR:", repr(e))
+    return resp
+
+
 @app.route("/chat")
 def chat():
 

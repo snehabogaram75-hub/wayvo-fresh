@@ -539,6 +539,7 @@ class _AccountInfoState extends State<AccountInfo> {
             onPressed: () async {
               final p = await SharedPreferences.getInstance();
               await p.remove('email');
+              await p.remove('token');
               if (!mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
