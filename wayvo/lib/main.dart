@@ -1463,6 +1463,7 @@ class _WayvoHomeState extends State<WayvoHome>
         ),
       ),
       onTap: onTap ?? () async {
+        if (historyOpen) setState(() => historyOpen = false);
         if (title == 'Log out') {
           final shouldLogout = await showDialog<bool>(
             context: context,
@@ -1509,6 +1510,24 @@ class _WayvoHomeState extends State<WayvoHome>
   }
 
   Widget buildMobileHistory() {
+    final mobile = MediaQuery.of(context).size.width < 800;
+    final menuItems = <Widget>[
+      _sideItem(Icons.auto_awesome, 'Image Generation'),
+      _sideItem(Icons.code, 'Code'),
+      _sideItem(Icons.book_outlined, 'Diary'),
+      _sideItem(Icons.extension_outlined, 'Plugins'),
+      _sideItem(Icons.calendar_month_outlined, 'Schedule / Interview'),
+      _sideItem(Icons.folder_outlined, 'Library'),
+      _sideItem(Icons.terminal, 'Codex'),
+      _sideItem(Icons.work_outline, 'Projects'),
+    ];
+    final accountItems = <Widget>[
+      _sideItem(Icons.person_outline, 'Profile / Account'),
+      _sideItem(Icons.tune, 'Personalization'),
+      _sideItem(Icons.settings_outlined, 'Settings'),
+      _sideItem(Icons.help_outline, 'Help'),
+      _sideItem(Icons.logout, 'Log out'),
+    ];
     return Material(
       elevation: 12,
       child: Container(
@@ -1517,11 +1536,10 @@ class _WayvoHomeState extends State<WayvoHome>
           color: Color(0xFF17152A),
         ),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
               child: Row(
                 children: [
                   const Expanded(
@@ -1549,97 +1567,94 @@ class _WayvoHomeState extends State<WayvoHome>
                 ],
               ),
             ),
-
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(
-                horizontal: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: SizedBox(
                 width: double.infinity,
-                height: 48,
+                height: 46,
                 child: ElevatedButton.icon(
                   onPressed: startNewChat,
                   icon: const Icon(Icons.add),
                   label: const Text('New Chat'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor:
-                        const Color(0xFF17152A),
+                    foregroundColor: const Color(0xFF17152A),
                     shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
               ),
             ),
-
-            const SizedBox(height: 28),
-
-            const Padding(
-              padding:
-                  EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'CHATS',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
+            const SizedBox(height: 8),
             Expanded(
-            child: chatList.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  if (mobile) ...menuItems,
+                  if (mobile)
+                    const Divider(color: Colors.white24, height: 20),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 4, 20, 6),
                     child: Text(
-                      'Your conversations will appear here.',
-                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                      'CHATS',
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                      ),
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: visibleChats.length + headerCount,
-                    itemBuilder: (context, index) {
-                      if (index < headerCount) {
-                        return buildListHeader(index);
-                      }
-                      final c = visibleChats[index - headerCount];
-                      final isActive = c['id'] == currentChatId;
-                      return ListTile(
-                        selected: isActive,
-                        selectedTileColor: Colors.white12,
-                        title: Text(
-                          c['title'] ?? 'Chat',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 14),
-                        ),
-                        onTap: () => openChat(c['id']),
-                        onLongPress: () => showChatOptions(c),
-                        leading: c['pinned'] == true
-                            ? const Icon(
-                                Icons.push_pin,
-                                size: 16,
-                                color: Colors.white54,
-                              )
-                            : null,
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.more_vert,
-                            size: 18,
-                            color: Colors.white38,
-                          ),
-                          onPressed: () => showChatOptions(c),
-                        ),
-                      );
-                    },
                   ),
-          ),
+                  for (var i = 0; i < headerCount; i++) buildListHeader(i),
+                  if (chatList.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
+                      child: Text(
+                        'Your conversations will appear here.',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  for (final c in visibleChats)
+                    ListTile(
+                      selected: c['id'] == currentChatId,
+                      selectedTileColor: Colors.white12,
+                      title: Text(
+                        c['title'] ?? 'Chat',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                      onTap: () => openChat(c['id']),
+                      onLongPress: () => showChatOptions(c),
+                      leading: c['pinned'] == true
+                          ? const Icon(
+                              Icons.push_pin,
+                              size: 16,
+                              color: Colors.white54,
+                            )
+                          : null,
+                      trailing: IconButton(
+                        icon: const Icon(
+                          Icons.more_vert,
+                          size: 18,
+                          color: Colors.white38,
+                        ),
+                        onPressed: () => showChatOptions(c),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (mobile) const Divider(color: Colors.white24, height: 1),
+            if (mobile) ...accountItems,
+            const SizedBox(height: 4),
           ],
         ),
       ),
