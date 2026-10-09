@@ -725,7 +725,7 @@ def chat():
     if "user_id" not in session:
         return redirect("/")
 
-    return render_template("chat.html")
+    return render_template("wayvo_workspace.html")
 
 
 def web_search(query):
