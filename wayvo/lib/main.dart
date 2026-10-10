@@ -2199,7 +2199,50 @@ class _WayvoHomeState extends State<WayvoHome>
     await setSecure(false);
   }
 
+  String selectedPlain = '';
+
   Widget buildMessages() {
+    return SelectionArea(
+      onSelectionChanged: (c) => selectedPlain = c?.plainText ?? '',
+      contextMenuBuilder: (ctx, regionState) {
+        final items = <ContextMenuButtonItem>[];
+        for (final item in regionState.contextMenuButtonItems) {
+          if (item.type == ContextMenuButtonType.copy ||
+              item.type == ContextMenuButtonType.selectAll) {
+            items.add(item);
+          }
+        }
+        final sel = selectedPlain.trim();
+        if (sel.isNotEmpty) {
+          items.add(
+            ContextMenuButtonItem(
+              label: 'Ask WAYVO',
+              onPressed: () {
+                regionState.hideToolbar();
+                askWayvoAbout(sel);
+              },
+            ),
+          );
+          items.add(
+            ContextMenuButtonItem(
+              label: 'Share',
+              onPressed: () {
+                regionState.hideToolbar();
+                shareText(sel);
+              },
+            ),
+          );
+        }
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: regionState.contextMenuAnchors,
+          buttonItems: items,
+        );
+      },
+      child: buildMessagesList(),
+    );
+  }
+
+  Widget buildMessagesList() {
     if (!sending) waitStart = null;
     return SingleChildScrollView(
       controller: scrollController,
@@ -2253,14 +2296,8 @@ class _WayvoHomeState extends State<WayvoHome>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SelectableText(
+                    Text(
                       message['content'] ?? '',
-                      contextMenuBuilder: (ctx, editableTextState) =>
-                          wayvoSelectionMenu(
-                            ctx,
-                            editableTextState,
-                            message['content'] ?? '',
-                          ),
                       style: TextStyle(
                         fontSize: 15,
                         height: 1.4,

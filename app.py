@@ -940,13 +940,10 @@ def build_live_block(message):
         "LIVE WEB SEARCH RESULTS (today is " + today + "). "
         "Use these web results as the primary source for the user answer. Prefer information directly supported by the results. Do not claim that live/current information is unavailable when search results are present.\n" + results + "\n\n"
         "LIVE-INFO ANSWER FORMAT (plain text only, no markdown symbols like * or #):\n"
-        "✅ Confirmed: facts clearly stated in the search results (already happened or official).\n"
-        "🕒 Expected: things announced, scheduled or reported as upcoming, not yet happened.\n"
-        "🔮 Prediction / Assumption: your own reasoning, clearly not confirmed.\n"
-        "🔗 Sources: 1 to 3 URLs from the search results that you actually used, one per line.\n"
-        "Rules: skip a section if it is empty. Never put guesses under Confirmed. For general information questions, answer normally using the web results when relevant. For current or changing information, rely on the web results. "
+        "Start with the line Today's points: then give 3 to 6 short lines, each starting with '- ', saying what is happening based on the search results. Do NOT put Confirmed on each line.\n"
+        "Only if the results contain upcoming or unconfirmed items, add a separate Expected: section (announced or scheduled, not yet happened). Only if you add your own reasoning, add a separate Prediction: section and say it is not confirmed. Skip empty sections.\n"
+        "End with Sources: followed by 1 to 3 URLs from the search results that you actually used, one per line.\n"
         "Never invent URLs. If results are weak or conflicting, say so. "
-        "Keep each section to short lines starting with '-'. "
         "Put the follow-up question after the Sources section as the last line.\n"
     )
 
