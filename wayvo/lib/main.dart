@@ -738,6 +738,16 @@ class _WayvoHomeState extends State<WayvoHome>
               onTap: () => Navigator.pop(ctx, 'lock'),
             ),
             ListTile(
+              leading: const Icon(Icons.ios_share),
+              title: const Text('Share chat link'),
+              onTap: () => Navigator.pop(ctx, 'share'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.link_off),
+              title: const Text('Stop sharing'),
+              onTap: () => Navigator.pop(ctx, 'unshare'),
+            ),
+            ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: const Text('Delete', style: TextStyle(color: Colors.red)),
               onTap: () => Navigator.pop(ctx, 'delete'),
@@ -762,6 +772,75 @@ class _WayvoHomeState extends State<WayvoHome>
       }
     } else if (choice == 'delete') {
       await confirmDeleteChat(chat);
+    } else if (choice == 'share') {
+      await shareChatLink(chat['id']);
+    } else if (choice == 'unshare') {
+      await stopSharingChat(chat['id']);
+    }
+  }
+
+  Future<void> shareChatLink(int chatId) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Share this chat?'),
+        content: const Text(
+          'Anyone with the link can read this chat (a read-only copy). One-time items are hidden. You can stop sharing anytime.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Create link'),
+          ),
+        ],
+      ),
+    );
+    if (go != true) return;
+    try {
+      final r = await dio.post('/api/chats/$chatId/share');
+      final d = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (d['success'] == true) {
+        final url = d['url'].toString();
+        await Clipboard.setData(ClipboardData(text: url));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Link copied')),
+        );
+        await shareText(url);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text((d['message'] ?? 'Could not create the link').toString()),
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = (e.response?.data is Map ? e.response?.data['message'] : null) ??
+          'Could not create the link. Try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg.toString())),
+      );
+    }
+  }
+
+  Future<void> stopSharingChat(int chatId) async {
+    try {
+      await dio.delete('/api/chats/$chatId/share');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sharing stopped. The old link no longer works.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not stop sharing. Try again.')),
+      );
     }
   }
 

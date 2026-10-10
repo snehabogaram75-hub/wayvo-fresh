@@ -103,5 +103,16 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS shared_chats (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            chat_id INTEGER NOT NULL,
+            title TEXT,
+            messages TEXT NOT NULL,
+            revoked BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
     conn.close()

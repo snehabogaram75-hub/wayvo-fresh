@@ -281,6 +281,10 @@ def delete_chat(chat_id):
         (chat_id, session["user_id"])
     )
     conn.execute(
+        "UPDATE shared_chats SET revoked = TRUE WHERE chat_id = ? AND user_id = ?",
+        (chat_id, session["user_id"])
+    )
+    conn.execute(
         "DELETE FROM chats WHERE id = ? AND user_id = ?",
         (chat_id, session["user_id"])
     )
@@ -816,6 +820,7 @@ def delete_all_chats():
     conn = get_db()
     conn.execute("DELETE FROM one_time_items WHERE user_id = ?", (uid,))
     conn.execute("DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id = ?)", (uid,))
+    conn.execute("UPDATE shared_chats SET revoked = TRUE WHERE user_id = ?", (uid,))
     conn.execute("DELETE FROM chats WHERE user_id = ?", (uid,))
     conn.commit()
     conn.close()
@@ -851,6 +856,135 @@ def add_auth_token(resp):
                 resp.set_data(_json.dumps(body))
     except Exception as e:
         print("TOKEN ERROR:", repr(e))
+    return resp
+
+
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://wayvo-fresh-1.onrender.com")
+
+SHARE_HTML = r"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>__TITLE__ - WAYVO shared chat</title>
+<style>
+body{margin:0;background:#F8F7F2;color:#17152A;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.5}
+.wrap{max-width:720px;margin:0 auto;padding:20px 14px 40px}
+.logo{font-weight:800;letter-spacing:3px}
+h1{font-size:20px;margin:14px 0 4px}
+.note{font-size:12px;color:#777;margin-bottom:18px}
+.m{margin:10px 0;padding:11px 14px;border-radius:16px;max-width:88%;white-space:pre-wrap;word-wrap:break-word}
+.u{background:#17152A;color:#fff;margin-left:auto}
+.a{background:#fff;border:1px solid #e2e0d8}
+.r{font-size:11px;opacity:.6;margin-bottom:3px}
+a{color:#17152A}
+</style></head><body><div class="wrap">
+<div class="logo">WAYVO</div>
+<h1>__TITLE__</h1>
+<div class="note">Shared chat (read-only copy).</div>
+__BODY__
+<p class="note">Shared from WAYVO, a personal AI assistant. <a href="https://snehabogaram75-hub.github.io/wayvo-fresh/">Learn more</a></p>
+</div></body></html>"""
+
+
+@app.route("/api/chats/<int:chat_id>/share", methods=["POST"])
+def share_chat(chat_id):
+    import json as _json
+    import secrets
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    uid = session["user_id"]
+    conn = get_db()
+    chat = conn.execute(
+        "SELECT id, title, locked FROM chats WHERE id = ? AND user_id = ?",
+        (chat_id, uid)
+    ).fetchone()
+    if not chat:
+        conn.close()
+        return jsonify({"success": False, "message": "Chat not found"}), 404
+    if chat["locked"]:
+        conn.close()
+        return jsonify({"success": False, "message": "Locked chats cannot be shared. Unlock the chat first."}), 403
+    rows = conn.execute(
+        "SELECT role, content FROM messages WHERE chat_id = ? AND role != 'CONTEXT' ORDER BY id ASC",
+        (chat_id,)
+    ).fetchall()
+    msgs = []
+    for r in rows:
+        c = r["content"]
+        if c.startswith("[[ONETIME"):
+            c = "[One-time item hidden]"
+        msgs.append({"role": r["role"], "content": c})
+    if not msgs:
+        conn.close()
+        return jsonify({"success": False, "message": "Nothing to share yet."}), 400
+    payload = _json.dumps(msgs)
+    existing = conn.execute(
+        "SELECT token FROM shared_chats WHERE chat_id = ? AND user_id = ? AND revoked = FALSE",
+        (chat_id, uid)
+    ).fetchone()
+    if existing:
+        token = existing["token"]
+        conn.execute(
+            "UPDATE shared_chats SET messages = ?, title = ? WHERE token = ?",
+            (payload, chat["title"], token)
+        )
+    else:
+        token = secrets.token_urlsafe(16)
+        conn.execute(
+            "INSERT INTO shared_chats (token, user_id, chat_id, title, messages) VALUES (?, ?, ?, ?, ?)",
+            (token, uid, chat_id, chat["title"], payload)
+        )
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "url": PUBLIC_BASE_URL + "/share/" + token})
+
+
+@app.route("/api/chats/<int:chat_id>/share", methods=["DELETE"])
+def unshare_chat(chat_id):
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    conn = get_db()
+    conn.execute(
+        "UPDATE shared_chats SET revoked = TRUE WHERE chat_id = ? AND user_id = ?",
+        (chat_id, session["user_id"])
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+
+@app.route("/share/<token>")
+def view_shared(token):
+    import json as _json
+    import html as _html
+    from flask import Response
+    conn = get_db()
+    row = conn.execute(
+        "SELECT title, messages FROM shared_chats WHERE token = ? AND revoked = FALSE",
+        (token,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        page = SHARE_HTML.replace("__TITLE__", "Link not available").replace(
+            "__BODY__", "<p>This shared chat does not exist or was removed.</p>"
+        )
+        return Response(page, status=404, mimetype="text/html")
+    try:
+        msgs = _json.loads(row["messages"])
+    except Exception:
+        msgs = []
+    parts = []
+    for item in msgs:
+        is_user = item.get("role") == "You"
+        parts.append(
+            '<div class="m ' + ("u" if is_user else "a") + '"><div class="r">'
+            + ("User" if is_user else "WAYVO") + '</div>'
+            + _html.escape(str(item.get("content", ""))) + '</div>'
+        )
+    title = _html.escape(row["title"] or "Chat")
+    page = SHARE_HTML.replace("__TITLE__", title).replace("__BODY__", "".join(parts))
+    resp = Response(page, mimetype="text/html")
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     return resp
 
 
