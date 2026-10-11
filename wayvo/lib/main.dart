@@ -23,7 +23,7 @@ import 'package:path_provider/path_provider.dart';
 final Dio dio = Dio(
   BaseOptions(
     baseUrl: const String.fromEnvironment("WAYVO_API_URL", defaultValue: "https://" "wayvo-fresh-1.onrender.com"),
-    connectTimeout: const Duration(seconds: 10),
+    connectTimeout: const Duration(seconds: 60),
     receiveTimeout: const Duration(minutes: 5),
     extra: {'withCredentials': true},
   ),
@@ -190,7 +190,7 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() {
         errorMessage =
             e.response?.data?['message'] ??
-            'Could not connect to WAYVO backend.';
+            'WAYVO server is waking up. Please try again in a minute.';
       });
     } catch (e) {
       setState(() {
@@ -1004,7 +1004,7 @@ class _WayvoHomeState extends State<WayvoHome>
           'role': 'WAYVO',
           'content':
               e.response?.data?['message'] ??
-              'Could not connect to WAYVO backend.',
+              'WAYVO server is waking up. Please try again in a minute.',
         });
       });
     } catch (e) {
