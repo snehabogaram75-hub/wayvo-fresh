@@ -278,7 +278,55 @@ body{
 
 <script>
 const messageInput = document.getElementById("messageInput");
+
 const sendBtn = document.getElementById("sendBtn");
+
+function renderWayvoMessage(container, role, content) {
+    const div = document.createElement("div");
+    div.className = role === "You"
+        ? "message user-message"
+        : "message ai-message";
+
+    const label = document.createElement("span");
+    label.textContent = role;
+    div.appendChild(label);
+
+    const text = String(content ?? "");
+    const urlPattern = /https?:\/\/[^\s<>"']+/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = urlPattern.exec(text)) !== null) {
+        div.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+
+        const rawUrl = match[0];
+        const url = rawUrl.replace(/[),.!?;:]+$/, "");
+        const trailing = rawUrl.slice(url.length);
+
+        try {
+            const parsed = new URL(url);
+            if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+                const link = document.createElement("a");
+                link.href = parsed.href;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                link.textContent = url;
+                div.appendChild(link);
+            } else {
+                div.appendChild(document.createTextNode(url));
+            }
+        } catch {
+            div.appendChild(document.createTextNode(url));
+        }
+
+        if (trailing) div.appendChild(document.createTextNode(trailing));
+        lastIndex = match.index + rawUrl.length;
+    }
+
+    div.appendChild(document.createTextNode(text.slice(lastIndex)));
+    container.appendChild(div);
+}
+
 
 sendBtn.addEventListener("click", async function () {
     const message = messageInput.value.trim();
@@ -331,18 +379,7 @@ sendBtn.addEventListener("click", async function () {
                         chatMessages.innerHTML = "";
 
                         chatData.messages.forEach(function(msg) {
-                            const div = document.createElement("div");
-                            div.className = msg.role === "You"
-                                ? "message user-message"
-                                : "message ai-message";
-
-                            const label = document.createElement("span");
-                            label.textContent = msg.role;
-
-                            div.appendChild(label);
-                            div.appendChild(document.createTextNode(msg.content));
-
-                            chatMessages.appendChild(div);
+                            renderWayvoMessage(chatMessages, msg.role, msg.content);
                         });
                     });
 
@@ -351,7 +388,7 @@ sendBtn.addEventListener("click", async function () {
             }
 
             loadChatHistory();
-            chatMessages.innerHTML += '<div class="message user-message"><span>You</span>' + message + '</div>';
+            renderWayvoMessage(chatMessages, "You", message);
 
             const history = document.getElementById("chatHistory");
             const empty = history.querySelector(".history-empty");
@@ -360,7 +397,7 @@ sendBtn.addEventListener("click", async function () {
             if (!history.querySelector(".history-item")) {
                 history.innerHTML += '<div class="history-item">' + message + '</div>';
             }
-            chatMessages.innerHTML += '<div class="message ai-message"><span>WAYVO</span>' + data.reply + '</div>';
+            renderWayvoMessage(chatMessages, "WAYVO", data.reply);
             messageInput.value = "";
         window.selectedImage = null;
         } else {

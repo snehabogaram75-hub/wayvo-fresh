@@ -3,6 +3,27 @@ import './style.css'
 
 const API = '';
 
+function renderMessageContent(content) {
+  const parts = String(content ?? '').split(/(https?:\/\/[^\s<>"']+)/g)
+
+  return parts.map((part, index) => {
+    if (!/^https?:\/\//i.test(part)) return part
+
+    const url = part.replace(/[),.!?;:]+$/, '')
+    const trailing = part.slice(url.length)
+
+    return (
+      <span key={index}>
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          {url}
+        </a>
+        {trailing}
+      </span>
+    )
+  })
+}
+
+
 function App() {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState([])
@@ -147,7 +168,7 @@ function App() {
                     <div className="message-role">
                       {m.role === 'user' ? 'You' : 'WAYVO'}
                     </div>
-                    <div className="message-text">{m.content}</div>
+                    <div className="message-text">{renderMessageContent(m.content)}</div>
                   </div>
                 </div>
               ))}
