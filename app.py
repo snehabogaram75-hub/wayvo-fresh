@@ -1012,14 +1012,25 @@ def web_search(query):
     if is_news:
         options["topic"] = "news"
         options["time_range"] = "day"
-    results = client.search(**options)
-    lines = []
-    for r in results.get("results", []):
-        title = r.get("title", "")
-        content = (r.get("content", "") or "")[:1200]
-        url = r.get("url", "")
-        lines.append(f"Title: {title} | Content: {content} | URL: {url}")
-    return "\n\n".join(lines)
+    print("TAVILY DIAGNOSTIC:", {
+        "key_present": bool(key),
+        "query_type": "news" if is_news else "general",
+        "topic": options.get("topic", "general"),
+    })
+    try:
+        results = client.search(**options)
+        items = results.get("results", [])
+        print("TAVILY RESULT COUNT:", len(items))
+        lines = []
+        for r in items:
+            title = r.get("title", "")
+            content = (r.get("content", "") or "")[:1200]
+            url = r.get("url", "")
+            lines.append(f"Title: {title} | Content: {content} | URL: {url}")
+        return "\n\n".join(lines)
+    except Exception as e:
+        print("TAVILY ERROR:", type(e).__name__, str(e)[:500])
+        raise
 
 
 _LIVE_HINTS = [
