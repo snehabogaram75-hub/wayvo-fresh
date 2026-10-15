@@ -1208,7 +1208,8 @@ WAYVO:
             }
         ],
         temperature=0.4,
-        max_tokens=max_toks
+        reasoning_effort="low",
+        max_tokens=max(max_toks, 1500)
     )
 
     choice = response.choices[0]
