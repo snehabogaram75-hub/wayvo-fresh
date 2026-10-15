@@ -1142,6 +1142,17 @@ def response_style(message, pref="short"):
     )
 
 
+@app.route("/api/health")
+def api_health():
+    try:
+        db = get_db()
+        db.execute("SELECT 1")
+        db.close()
+        return {"status": "ok", "db": "ok"}, 200
+    except Exception:
+        return {"status": "error", "db": "fail"}, 500
+
+
 def ask_ollama(message, history, pref="short"):
     conversation = ""
 
