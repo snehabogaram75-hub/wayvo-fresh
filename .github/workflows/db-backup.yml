@@ -1,0 +1,32 @@
+name: weekly-db-backup
+on:
+  schedule:
+    - cron: "30 21 * * 6"
+  workflow_dispatch:
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
+      - name: Dump and encrypt
+        env:
+          PGHOST: ${{ secrets.PGHOST }}
+          PGUSER: ${{ secrets.PGUSER }}
+          PGPASSWORD: ${{ secrets.PGPASSWORD }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          PGPORT: "5432"
+          PGDATABASE: postgres
+        run: |
+          set -eo pipefail
+          /usr/lib/postgresql/18/bin/pg_dump -n public --no-owner --no-privileges | gzip | gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" --symmetric --cipher-algo AES256 -o wayvo-backup.sql.gz.gpg
+          ls -l wayvo-backup.sql.gz.gpg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wayvo-db-backup
+          path: wayvo-backup.sql.gz.gpg
+          retention-days: 30
