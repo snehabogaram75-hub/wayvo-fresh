@@ -1,3 +1,4 @@
+import 'dart:convert' as dc;
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
@@ -968,32 +969,80 @@ class _WayvoHomeState extends State<WayvoHome>
     scrollToBottom();
 
     try {
+      final prefs = await SharedPreferences.getInstance();
       final response = await dio.post(
-        '/api/chat',
-        data: {'style': (await SharedPreferences.getInstance()).getString('resp_style') ?? 'short',
-          'message': message, 'chat_id': currentChatId},
-        options: Options(contentType: Headers.jsonContentType),
+        '/api/chat/stream',
+        data: {
+          'style': prefs.getString('resp_style') ?? 'short',
+          'message': message,
+          'chat_id': currentChatId,
+        },
+        options: Options(
+          contentType: Headers.jsonContentType,
+          responseType: ResponseType.stream,
+        ),
       );
 
-      final data = response.data is String
-          ? jsonDecode(response.data)
-          : response.data;
+      final body = response.data as ResponseBody;
+      var replyText = '';
+      var started = false;
+      var buffer = '';
+
+      void handleLine(String line) {
+        if (line.trim().isEmpty) return;
+        final obj = jsonDecode(line);
+        if (obj['chat_id'] != null) currentChatId = obj['chat_id'];
+        if (obj['t'] != null) {
+          replyText += obj['t'].toString();
+          if (!mounted) return;
+          setState(() {
+            if (!started) {
+              messages.add({'role': 'WAYVO', 'content': replyText});
+              started = true;
+            } else {
+              messages[messages.length - 1] = {
+                'role': 'WAYVO',
+                'content': replyText,
+              };
+            }
+          });
+          scrollToBottom();
+        }
+        if (obj['done'] == true && obj['reply'] != null) {
+          replyText = obj['reply'].toString();
+        }
+      }
+
+      await for (final chunk
+          in body.stream.cast<List<int>>().transform(dc.utf8.decoder)) {
+        buffer += chunk;
+        final parts = buffer.split('\n');
+        buffer = parts.removeLast();
+        for (final line in parts) {
+          handleLine(line);
+        }
+      }
+      if (buffer.trim().isNotEmpty) handleLine(buffer);
 
       if (!mounted) return;
 
+      final finalText =
+          replyText.isEmpty ? 'I could not generate a response.' : replyText;
       setState(() {
-        currentChatId = data['chat_id'] ?? currentChatId;
-        messages.add({
-          'role': 'WAYVO',
-          'content': data['reply'] ?? 'I could not generate a response.',
-        });
+        if (started) {
+          messages[messages.length - 1] = {
+            'role': 'WAYVO',
+            'content': finalText,
+          };
+        } else {
+          messages.add({'role': 'WAYVO', 'content': finalText});
+        }
       });
 
       if (voiceMode) {
-        final replyText = (data['reply'] ?? '').toString();
         voiceStatus.value = 'Speaking…';
-        voiceText.value = replyText;
-        speak(replyText);
+        voiceText.value = finalText;
+        speak(finalText);
       }
 
       scrollToBottom();
@@ -1005,7 +1054,11 @@ class _WayvoHomeState extends State<WayvoHome>
         messages.add({
           'role': 'WAYVO',
           'content':
-              e.response?.data?['message'] ??
+              (e.response?.statusCode == 429
+                  ? 'Too many messages. Please wait a minute and try again.'
+                  : (e.response?.data is Map
+                      ? e.response?.data['message']
+                      : null)) ??
               'WAYVO server is waking up. Please try again in a minute.',
         });
       });
