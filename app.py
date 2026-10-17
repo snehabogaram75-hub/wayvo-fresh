@@ -68,6 +68,29 @@ CORS(app, supports_credentials=True)
 init_db()
 
 
+# WAYVO_RATE: simple per-user chat rate limit (per worker, in memory)
+import time as _rl_time
+_RATE_LOG = {}
+RATE_MAX = int(os.environ.get("CHAT_RATE_MAX", "15"))
+RATE_WINDOW = 60
+
+
+@app.before_request
+def wayvo_rate_limit():
+    if request.method != "POST" or request.path != "/api/chat":
+        return None
+    key = str(session.get("user_id") or request.remote_addr)
+    now = _rl_time.time()
+    hits = [t for t in _RATE_LOG.get(key, []) if now - t < RATE_WINDOW]
+    if len(hits) >= RATE_MAX:
+        _RATE_LOG[key] = hits
+        msg = "Too many messages. Please wait a minute and try again."
+        return jsonify({"reply": msg, "error": msg}), 429
+    hits.append(now)
+    _RATE_LOG[key] = hits
+    return None
+
+
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -76,6 +99,11 @@ def home():
 @app.route("/signup", methods=["POST"])
 def signup():
     data = request.get_json() or {}
+    if os.environ.get("SIGNUP_OPEN", "1") == "0":
+        return jsonify({
+            "success": False,
+            "message": "Signups are closed right now."
+        })
 
     email = data.get("email", "").strip()
     password = data.get("password", "")
