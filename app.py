@@ -1,3 +1,4 @@
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, render_template, request, jsonify, redirect, session
 from flask_cors import CORS
 from database import get_db, init_db
@@ -119,7 +120,7 @@ def signup():
     try:
         conn.execute(
             "INSERT INTO users (email, password) VALUES (?, ?)",
-            (email, password)
+            (email, generate_password_hash(password))
         )
 
         conn.commit()
@@ -149,9 +150,25 @@ def login():
     conn = get_db()
 
     user = conn.execute(
-        "SELECT * FROM users WHERE email = ? AND password = ?",
-        (email, password)
+        "SELECT * FROM users WHERE email = ?",
+        (email,)
     ).fetchone()
+
+    if user:
+        stored = user["password"] or ""
+        if stored.startswith(("scrypt:", "pbkdf2:")):
+            ok = check_password_hash(stored, password)
+        else:
+            import hmac
+            ok = hmac.compare_digest(stored.encode(), password.encode())
+            if ok:
+                conn.execute(
+                    "UPDATE users SET password = ? WHERE id = ?",
+                    (generate_password_hash(password), user["id"])
+                )
+                conn.commit()
+        if not ok:
+            user = None
 
     conn.close()
 
