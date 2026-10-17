@@ -140,6 +140,127 @@ def signup():
         conn.close()
 
 
+def _ensure_reset_table():
+    c = get_db()
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS password_resets ("
+        "id SERIAL PRIMARY KEY, email TEXT NOT NULL, code_hash TEXT NOT NULL, "
+        "expires_at BIGINT NOT NULL, created_at BIGINT NOT NULL, "
+        "attempts INTEGER NOT NULL DEFAULT 0)"
+    )
+    c.commit()
+    c.close()
+
+
+def _send_reset_email(to_email, code):
+    key = os.environ.get("BREVO_API_KEY")
+    sender = os.environ.get("BREVO_SENDER")
+    if not key or not sender:
+        print("RESET EMAIL: BREVO_API_KEY or BREVO_SENDER missing")
+        return False
+    try:
+        r = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={
+                "api-key": key,
+                "accept": "application/json",
+                "content-type": "application/json",
+            },
+            json={
+                "sender": {"name": "WAYVO", "email": sender},
+                "to": [{"email": to_email}],
+                "subject": "Your WAYVO password reset code",
+                "textContent": (
+                    "Your WAYVO password reset code is: " + code + "\n\n"
+                    "It is valid for 15 minutes. If you did not ask for this, ignore this email."
+                ),
+            },
+            timeout=15,
+        )
+        print("RESET EMAIL STATUS:", r.status_code)
+        return r.status_code in (200, 201, 202)
+    except Exception as e:
+        print("RESET EMAIL ERROR:", repr(e))
+        return False
+
+
+@app.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    import secrets
+    import time
+    data = request.get_json() or {}
+    email = data.get("email", "").strip()
+    generic = {
+        "success": True,
+        "message": "If this email is registered, a reset code has been sent. It is valid for 15 minutes.",
+    }
+    if not email:
+        return jsonify({"success": False, "message": "Please enter your email."}), 400
+    _ensure_reset_table()
+    conn = get_db()
+    try:
+        user = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if user:
+            now = int(time.time())
+            last = conn.execute(
+                "SELECT created_at FROM password_resets WHERE email = ? ORDER BY id DESC LIMIT 1",
+                (email,),
+            ).fetchone()
+            if last and now - int(last["created_at"]) < 60:
+                return jsonify(generic)
+            code = str(secrets.randbelow(900000) + 100000)
+            conn.execute("DELETE FROM password_resets WHERE email = ?", (email,))
+            conn.execute(
+                "INSERT INTO password_resets (email, code_hash, expires_at, created_at, attempts) VALUES (?, ?, ?, ?, 0)",
+                (email, generate_password_hash(code), now + 900, now),
+            )
+            conn.commit()
+            _send_reset_email(email, code)
+    finally:
+        conn.close()
+    return jsonify(generic)
+
+
+@app.route("/reset-password", methods=["POST"])
+def reset_password():
+    import time
+    data = request.get_json() or {}
+    email = data.get("email", "").strip()
+    code = str(data.get("code", "")).strip()
+    new_password = data.get("new_password", "")
+    bad = {"success": False, "message": "Invalid or expired code."}
+    if not email or not code or not new_password:
+        return jsonify({"success": False, "message": "Please fill all fields."}), 400
+    if len(new_password) < 6:
+        return jsonify({"success": False, "message": "Password must be at least 6 characters."}), 400
+    _ensure_reset_table()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, code_hash, expires_at, attempts FROM password_resets WHERE email = ? ORDER BY id DESC LIMIT 1",
+            (email,),
+        ).fetchone()
+        now = int(time.time())
+        if not row or now > int(row["expires_at"]) or int(row["attempts"]) >= 5:
+            if row:
+                conn.execute("DELETE FROM password_resets WHERE email = ?", (email,))
+                conn.commit()
+            return jsonify(bad), 400
+        if not check_password_hash(row["code_hash"], code):
+            conn.execute("UPDATE password_resets SET attempts = attempts + 1 WHERE id = ?", (row["id"],))
+            conn.commit()
+            return jsonify(bad), 400
+        conn.execute(
+            "UPDATE users SET password = ? WHERE email = ?",
+            (generate_password_hash(new_password), email),
+        )
+        conn.execute("DELETE FROM password_resets WHERE email = ?", (email,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"success": True, "message": "Password updated. You can now login."})
+
+
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json() or {}
