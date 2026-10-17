@@ -78,7 +78,7 @@ RATE_WINDOW = 60
 
 @app.before_request
 def wayvo_rate_limit():
-    if request.method != "POST" or request.path != "/api/chat":
+    if request.method != "POST" or request.path not in ("/api/chat", "/api/chat/stream"):
         return None
     key = str(session.get("user_id") or request.remote_addr)
     now = _rl_time.time()
@@ -1198,7 +1198,7 @@ def api_health():
         return {"status": "error", "db": "fail"}, 500
 
 
-def ask_ollama(message, history, pref="short"):
+def ask_ollama(message, history, pref="short", stream_mode=False):
     conversation = ""
 
     for item in history[-12:]:
@@ -1265,8 +1265,11 @@ WAYVO:
         ],
         temperature=0.4,
         reasoning_effort="low",
-        max_tokens=max(max_toks, 1500)
+        max_tokens=max(max_toks, 1500),
+        stream=stream_mode
     )
+    if stream_mode:
+        return response
 
     choice = response.choices[0]
     reply = choice.message.content
@@ -1410,6 +1413,84 @@ def api_chat():
         "chat_id": chat_id
     })
 
+
+
+@app.route("/api/chat/stream", methods=["POST"])
+def api_chat_stream():
+    import json as _json
+    from flask import Response, stream_with_context
+
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+
+    data = request.get_json() or {}
+    message = data.get("message", "").strip()
+    if not message:
+        return jsonify({"success": False, "message": "Please enter a message."}), 400
+
+    sync_chat(data.get("chat_id"))
+    history = session.get("chat_history", [])
+    style = data.get("style") or "short"
+    user_id = session["user_id"]
+
+    conn = get_db()
+    chat_id = session.get("chat_id")
+    if not chat_id:
+        title = message[:40] if message else "New Chat"
+        cursor = conn.execute(
+            "INSERT INTO chats (user_id, title) VALUES (?, ?)",
+            (user_id, title)
+        )
+        chat_id = cursor.lastrowid
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "You", message)
+    )
+    conn.commit()
+    conn.close()
+
+    # cookie cannot change once streaming starts: next request reloads history from DB
+    session["chat_id"] = None
+    session["chat_history"] = []
+    session.modified = True
+
+    fallback = "I couldn't generate an answer just now. Please try your question again."
+
+    def generate():
+        yield _json.dumps({"chat_id": chat_id}) + "\n"
+        full = ""
+        try:
+            stream = ask_ollama(message, history, style, stream_mode=True)
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                piece = chunk.choices[0].delta.content
+                if piece:
+                    full += piece
+                    yield _json.dumps({"t": piece}) + "\n"
+        except Exception as e:
+            print("GROQ STREAM ERROR:", repr(e))
+        if not full.strip():
+            full = fallback
+            yield _json.dumps({"t": full}) + "\n"
+        full = full.strip()
+        try:
+            c = get_db()
+            c.execute(
+                "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+                (chat_id, "WAYVO", full)
+            )
+            c.commit()
+            c.close()
+        except Exception as e:
+            print("STREAM SAVE ERROR:", repr(e))
+        yield _json.dumps({"done": True, "reply": full}) + "\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/chat/document", methods=["POST"])
