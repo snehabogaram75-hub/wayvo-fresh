@@ -58,7 +58,7 @@ def extract_document_text(file):
 
     raise ValueError("Unsupported document type.")
 
-app.secret_key = "wayvo-secret-key"
+app.secret_key = os.environ.get("SECRET_KEY", "wayvo-secret-key")
 app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
