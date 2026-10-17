@@ -1,3 +1,5 @@
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -2375,13 +2377,16 @@ class _WayvoHomeState extends State<WayvoHome>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      message['content'] ?? '',
+                    WayvoLinkText(
+                      text: message['content'] ?? '',
                       style: TextStyle(
                         fontSize: 15,
                         height: 1.4,
                         color: isUser ? Colors.white : Colors.black87,
                       ),
+                      linkColor: isUser
+                          ? const Color(0xFF86EFAC)
+                          : const Color(0xFF15803D),
                     ),
                     const SizedBox(height: 6),
                     Row(
@@ -3847,4 +3852,81 @@ class _FeatureScreenState extends State<FeatureScreen> {
       ),
     ],
   );
+}
+
+
+class WayvoLinkText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final Color linkColor;
+  const WayvoLinkText({
+    super.key,
+    required this.text,
+    required this.style,
+    required this.linkColor,
+  });
+
+  @override
+  State<WayvoLinkText> createState() => _WayvoLinkTextState();
+}
+
+class _WayvoLinkTextState extends State<WayvoLinkText> {
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  void _clear() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  @override
+  void dispose() {
+    _clear();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _clear();
+    final spans = <InlineSpan>[];
+    final re = RegExp(r'https?://[^\s<>")\]]+');
+    int last = 0;
+    for (final m in re.allMatches(widget.text)) {
+      if (m.start > last) {
+        spans.add(TextSpan(text: widget.text.substring(last, m.start)));
+      }
+      var url = m.group(0)!;
+      var trail = '';
+      while (url.isNotEmpty && '.,;:!?'.contains(url[url.length - 1])) {
+        trail = url[url.length - 1] + trail;
+        url = url.substring(0, url.length - 1);
+      }
+      final link = url;
+      final rec = TapGestureRecognizer()
+        ..onTap = () async {
+          final uri = Uri.tryParse(link);
+          if (uri != null) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        };
+      _recognizers.add(rec);
+      spans.add(TextSpan(
+        text: link,
+        recognizer: rec,
+        style: TextStyle(
+          color: widget.linkColor,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.underline,
+          decorationColor: widget.linkColor,
+        ),
+      ));
+      if (trail.isNotEmpty) spans.add(TextSpan(text: trail));
+      last = m.end;
+    }
+    if (last < widget.text.length) {
+      spans.add(TextSpan(text: widget.text.substring(last)));
+    }
+    return Text.rich(TextSpan(style: widget.style, children: spans));
+  }
 }
