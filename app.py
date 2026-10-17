@@ -1319,6 +1319,74 @@ def api_health():
         return {"status": "error", "db": "fail"}, 500
 
 
+_RAG_STOP = {
+    "the", "and", "for", "are", "was", "were", "you", "your", "can", "could",
+    "what", "when", "where", "which", "who", "whom", "why", "how", "this",
+    "that", "these", "those", "with", "from", "about", "into", "have", "has",
+    "had", "does", "did", "not", "but", "please", "tell", "give", "show",
+    "explain", "make", "write", "some", "any", "all", "its", "than", "then",
+    "them", "they", "their", "there", "here", "will", "would", "should",
+    "chey", "cheppu", "ela", "enti", "ento", "naku", "nuvvu", "bro", "ra",
+}
+
+
+def build_files_block(user_id, message):
+    if os.environ.get("FILES_RAG", "1") == "0" or not user_id:
+        return ""
+    words = re.findall(r"[A-Za-z0-9\u0c00-\u0c7f]{3,}", (message or "").lower())
+    terms = []
+    for w in words:
+        if w not in _RAG_STOP and w not in terms:
+            terms.append(w)
+    terms = terms[:8]
+    if not terms:
+        return ""
+    tsq = " | ".join(terms)
+    need = 2 if len(terms) >= 3 else 1
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, filename, extracted_text FROM user_files "
+            "WHERE user_id = ? AND extracted_text IS NOT NULL "
+            "AND to_tsvector('simple', extracted_text) @@ to_tsquery('simple', ?) "
+            "ORDER BY ts_rank(to_tsvector('simple', extracted_text), to_tsquery('simple', ?)) DESC "
+            "LIMIT 3",
+            (user_id, tsq, tsq),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    scored = []
+    for r in rows:
+        text = " ".join((r["extracted_text"] or "").split())
+        for i in range(0, max(len(text), 1), 800):
+            chunk = text[i:i + 1000]
+            low = chunk.lower()
+            distinct = sum(1 for t in terms if t in low)
+            if distinct >= need:
+                freq = sum(low.count(t) for t in terms)
+                scored.append((distinct, freq, r["filename"], chunk))
+    if not scored:
+        return ""
+    scored.sort(key=lambda x: (-x[0], -x[1]))
+    parts = []
+    total = 0
+    for distinct, freq, fname, chunk in scored[:4]:
+        if total + len(chunk) > 4500:
+            break
+        parts.append("[From file: " + fname + "]\n" + chunk)
+        total += len(chunk)
+    if not parts:
+        return ""
+    return (
+        "USER'S OWN UPLOADED FILES (excerpts that may be relevant). Use them only if they help "
+        "answer the question, and mention the file name when you use them. "
+        "If they are not relevant, ignore them completely.\n\n"
+        + "\n\n".join(parts) + "\n"
+    )
+
+
 def ask_ollama(message, history, pref="short", stream_mode=False):
     conversation = ""
 
@@ -1328,6 +1396,12 @@ def ask_ollama(message, history, pref="short", stream_mode=False):
         conversation += f"{role}: {content}\n"
 
     live_block = build_live_block(message)
+    try:
+        from flask import has_request_context
+        files_block = build_files_block(session.get("user_id"), message) if has_request_context() else ""
+    except Exception as e:
+        print("FILES RAG ERROR:", repr(e))
+        files_block = ""
     length_rule, max_toks = response_style(message, pref)
 
     prompt = f"""
@@ -1356,6 +1430,7 @@ IMPORTANT RULES:
     that helps the user go deeper or take the next step. Keep it on its own
     last line, and never skip it, even for short answers.
 
+{files_block}
 {live_block}
 {length_rule}
 
