@@ -460,6 +460,16 @@ class _WayvoHomeState extends State<WayvoHome>
 
   Future<void> speak(String text) async {
     text = speakableText(text);
+    try {
+      final isTelugu = RegExp(r'[\u0C00-\u0C7F]').hasMatch(text);
+      if (isTelugu) {
+        final teOk = await tts.isLanguageAvailable('te-IN');
+        if (teOk == true) await tts.setLanguage('te-IN');
+      } else {
+        final inOk = await tts.isLanguageAvailable('en-IN');
+        await tts.setLanguage(inOk == true ? 'en-IN' : 'en-US');
+      }
+    } catch (_) {}
     final clean = text
         .replaceAll(RegExp(r'[*#`_>]'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
@@ -2388,15 +2398,29 @@ class _WayvoHomeState extends State<WayvoHome>
           if (messages.isNotEmpty)
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => copyText(
-                  messages
-                      .map((m) => '${m['role']}: ${m['content']}')
-                      .join('\n\n'),
-                  'Chat copied',
-                ),
-                icon: const Icon(Icons.copy_all, size: 16),
-                label: const Text('Copy all'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => copyText(
+                      messages
+                          .map((m) => '${m['role']}: ${m['content']}')
+                          .join('\n\n'),
+                      'Chat copied',
+                    ),
+                    icon: const Icon(Icons.copy_all, size: 16),
+                    label: const Text('Copy all'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => shareText(
+                      messages
+                          .map((m) => '${m['role']}: ${m['content']}')
+                          .join('\n\n'),
+                    ),
+                    icon: const Icon(Icons.ios_share, size: 16),
+                    label: const Text('Share'),
+                  ),
+                ],
               ),
             ),
           ...List.generate(messages.length, (index) {
