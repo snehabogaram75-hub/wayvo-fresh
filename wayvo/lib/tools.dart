@@ -412,12 +412,18 @@ class VoiceSettings extends StatefulWidget {
 
 class _VoiceSettingsState extends State<VoiceSettings> {
   double rate = 0.5;
+  String micLang = '';
 
   @override
   void initState() {
     super.initState();
     SharedPreferences.getInstance().then((p) {
-      if (mounted) setState(() => rate = p.getDouble('tts_rate') ?? 0.5);
+      if (mounted) {
+        setState(() {
+          rate = p.getDouble('tts_rate') ?? 0.5;
+          micLang = p.getString('stt_locale') ?? '';
+        });
+      }
     });
   }
 
@@ -440,6 +446,32 @@ class _VoiceSettingsState extends State<VoiceSettings> {
         ),
         const Text(
           'Slower on the left, faster on the right. Applies the next time you open the app.',
+          style: TextStyle(color: Colors.black54),
+        ),
+        const SizedBox(height: 24),
+        const Text('Microphone language', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        for (final o in const [
+          ['', 'Phone default'],
+          ['en_IN', 'English (India)'],
+          ['te_IN', 'Telugu'],
+        ])
+          ListTile(
+            title: Text(o[1]),
+            trailing: micLang == o[0]
+                ? const Icon(Icons.check_circle, color: Color(0xFF17152A))
+                : null,
+            onTap: () async {
+              setState(() => micLang = o[0]);
+              final p = await SharedPreferences.getInstance();
+              if (o[0].isEmpty) {
+                await p.remove('stt_locale');
+              } else {
+                await p.setString('stt_locale', o[0]);
+              }
+            },
+          ),
+        const Text(
+          'Telugu needs the Telugu speech pack on your phone (Google app > Settings > Voice).',
           style: TextStyle(color: Colors.black54),
         ),
       ],

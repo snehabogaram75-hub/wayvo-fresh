@@ -1626,7 +1626,6 @@ def api_chat_stream():
         return jsonify({"success": False, "message": "Please enter a message."}), 400
 
     sync_chat(data.get("chat_id"))
-    print("STREAM CHAT: requested =", repr(data.get("chat_id")), "| resolved =", repr(session.get("chat_id")))
     history = session.get("chat_history", [])
     style = data.get("style") or "short"
     user_id = session["user_id"]

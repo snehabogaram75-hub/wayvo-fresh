@@ -484,6 +484,12 @@ class _WayvoHomeState extends State<WayvoHome>
     if (mounted) setState(() => speaking = false);
   }
 
+  Future<String?> sttLocale() async {
+    final p = await SharedPreferences.getInstance();
+    final v = p.getString('stt_locale');
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
   Future<bool> ensureStt() async {
     if (sttReady) return true;
     sttReady = await speechToText.initialize(
@@ -551,6 +557,7 @@ class _WayvoHomeState extends State<WayvoHome>
       voiceStatus.value = 'Listening…';
       voiceText.value = '';
       await speechToText.listen(
+        localeId: await sttLocale(),
         listenOptions: stt.SpeechListenOptions(
           pauseFor: const Duration(seconds: 3),
           listenFor: const Duration(seconds: 60),
@@ -1126,6 +1133,7 @@ class _WayvoHomeState extends State<WayvoHome>
     });
 
     await speechToText.listen(
+      localeId: await sttLocale(),
       listenOptions: stt.SpeechListenOptions(
         pauseFor: const Duration(seconds: 3),
       ),
