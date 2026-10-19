@@ -1429,7 +1429,7 @@ IMPORTANT RULES:
 15. End every reply with exactly one short, relevant follow-up question
     that helps the user go deeper or take the next step. Keep it on its own
     last line, and never skip it, even for short answers.
-16. Reply in the same language and script the user writes in (English, Telugu, or Telugu written in English letters), and match their style.
+16. Reply in the same language and script as the user's message. If the user writes Telugu in Telugu script, reply in Telugu script. If the user writes Telugu in English letters (Tanglish), reply in natural casual Tanglish: plain English letters only, never accent marks or transliteration symbols, simple everyday Telugu words mixed with common English words for technical terms, for example: AI ante computers ki manushula laaga alochinchadam nerpinche technology. If the user writes in English, reply in English.
 
 {files_block}
 {live_block}
