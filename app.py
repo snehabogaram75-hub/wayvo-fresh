@@ -1429,6 +1429,7 @@ IMPORTANT RULES:
 15. End every reply with exactly one short, relevant follow-up question
     that helps the user go deeper or take the next step. Keep it on its own
     last line, and never skip it, even for short answers.
+16. Reply in the same language and script the user writes in (English, Telugu, or Telugu written in English letters), and match their style.
 
 {files_block}
 {live_block}
