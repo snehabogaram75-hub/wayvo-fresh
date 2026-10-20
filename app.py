@@ -78,7 +78,7 @@ RATE_WINDOW = 60
 
 @app.before_request
 def wayvo_rate_limit():
-    if request.method != "POST" or (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith("/quiz")):
+    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith("/quiz")):
         return None
     key = str(session.get("user_id") or request.remote_addr)
     now = _rl_time.time()
