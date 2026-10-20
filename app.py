@@ -78,7 +78,7 @@ RATE_WINDOW = 60
 
 @app.before_request
 def wayvo_rate_limit():
-    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper"))):
+    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper", "/generate"))):
         return None
     key = str(session.get("user_id") or request.remote_addr)
     now = _rl_time.time()
@@ -792,6 +792,112 @@ def delete_file(file_id):
     if not row:
         return jsonify({"success": False, "message": "File not found"}), 404
     return jsonify({"success": True})
+
+
+@app.route("/api/tutor/generate", methods=["POST"])
+def tutor_generate():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    kinds = {
+        "worksheet": (
+            "Worksheet",
+            "Create a student worksheet with 10 questions: 4 easy, 4 medium and 2 challenge questions, "
+            "with a good variety (fill in the blanks, short answer, problem solving). Do NOT include answers. "
+            "Add a title line and name/date line at the top."
+        ),
+        "test": (
+            "Test paper",
+            "Create a 25-mark test paper (time: 45 minutes) with the marks shown for every question: "
+            "Section A: 5 questions of 1 mark, Section B: 5 questions of 2 marks, Section C: 2 questions of 3 marks, "
+            "Section D: 1 question of 4 marks. The total must be exactly 25. Do NOT include answers. "
+            "Add general instructions at the top."
+        ),
+        "answers": (
+            "Practice Q&A",
+            "Create 8 practice questions (mixed difficulty) and give each one a complete answer with short "
+            "step-by-step working. Double-check every calculation and fact."
+        ),
+        "lesson": (
+            "Lesson plan",
+            "Create a 45-minute lesson plan with: learning objective, prerequisites, hook (5 min), explanation with "
+            "2 worked examples (15 min), guided practice (10 min), independent practice (10 min), recap and homework (5 min), "
+            "common mistakes students make, and 3 quick check questions with answers."
+        ),
+        "parent": (
+            "Parent message",
+            "Write a short progress message from the tutor to the student's parent (maximum 90 words), polite and honest: "
+            "one strength, one area to improve, one next step, and one small request for support at home. "
+            "Use ONLY the details the tutor gave in the notes (student name, observations). Never invent marks or facts."
+        ),
+    }
+    kind = d.get("kind", "worksheet")
+    if kind not in kinds:
+        kind = "worksheet"
+    lang = "te" if d.get("lang") == "te" else "en"
+    cls = str(d.get("class", "")).strip()[:30]
+    subject = str(d.get("subject", "")).strip()[:60]
+    topic = str(d.get("topic", "")).strip()[:200]
+    board = str(d.get("board", "")).strip()[:60]
+    extra = str(d.get("extra", "")).strip()[:500]
+    if not subject or (not topic and kind != "parent"):
+        return jsonify({"success": False, "message": "Please enter the subject and topic."}), 400
+    label, instruction = kinds[kind]
+    if lang == "te":
+        lang_rule = "Write everything in simple school-level Telugu script, keeping numbers, formulas and standard terms as usual."
+    else:
+        lang_rule = "Write in clear, simple English."
+    system = (
+        "You are WAYVO Tutor Assistant, helping a private tutor prepare teaching material. "
+        "Be accurate: double-check every answer, calculation and fact, and match the level of the class. "
+        + lang_rule +
+        " Plain text only: use simple numbering (1., 2., 3.) and section titles in capital letters. "
+        "Do not use markdown symbols like * or # and do not use tables. " + instruction
+    )
+    user = (
+        "Class: " + (cls or "not given") + "\n"
+        "Subject: " + subject + "\n"
+        "Board or syllabus: " + (board or "not given") + "\n"
+        "Topic: " + (topic or "not given") + "\n"
+        "Extra notes from the tutor: " + (extra or "none")
+    )
+    try:
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        resp = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.4,
+            reasoning_effort="low",
+            max_tokens=5000,
+        )
+        reply = (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        print("TUTOR ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not create it right now. Please try again."}), 500
+    if not reply:
+        return jsonify({"success": False, "message": "Could not create it right now. Please try again."}), 500
+    title = (label + ": " + (topic or subject))[:40]
+    summary = "Tutor Assistant: " + label + " | Class " + (cls or "-") + " | " + subject + " | " + (topic or "-")
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO chats (user_id, title) VALUES (?, ?)",
+        (session["user_id"], title)
+    )
+    chat_id = cursor.lastrowid
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "You", summary)
+    )
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "WAYVO", reply)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
 
 
 @app.route("/api/files/<int:file_id>/helper", methods=["POST"])
