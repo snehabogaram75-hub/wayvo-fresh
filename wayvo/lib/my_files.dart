@@ -208,6 +208,75 @@ class _MyFilesPageState extends State<MyFilesPage> {
     }
   }
 
+  Future<void> startFlashcards(dynamic f) async {
+    setState(() => busy = true);
+    try {
+      final r = await dio.post(
+        '/api/files/${f['id']}/flashcards',
+        data: {'count': 12},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (data['success'] == true) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => WayvoFlashcardsPage(
+              filename: (data['filename'] ?? f['filename']).toString(),
+              cards: List<Map<String, dynamic>>.from(
+                (data['cards'] as List).map(
+                  (e) => Map<String, dynamic>.from(e as Map),
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        snack(data['message'] ?? 'Could not create flashcards');
+      }
+    } on DioException catch (e) {
+      snack(
+        (e.response?.data is Map ? e.response?.data['message'] : null) ??
+            'Could not create flashcards. Try again.',
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> explainSimply(dynamic f, String lang) async {
+    setState(() => busy = true);
+    try {
+      final r = await dio.post(
+        '/api/study/explain',
+        data: {'file_id': f['id'], 'lang': lang},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (data['success'] == true) {
+        Navigator.pop<int>(context, data['chat_id'] as int);
+      } else {
+        snack(data['message'] ?? 'Could not explain the file');
+      }
+    } on DioException catch (e) {
+      snack(
+        (e.response?.data is Map ? e.response?.data['message'] : null) ??
+            'Could not explain the file. Try again.',
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> startQuiz(dynamic f) async {
     setState(() => busy = true);
     try {
@@ -282,6 +351,21 @@ class _MyFilesPageState extends State<MyFilesPage> {
               onTap: () => Navigator.pop(ctx, 'quiz'),
             ),
             ListTile(
+              leading: const Icon(Icons.style_outlined),
+              title: const Text('Flashcards'),
+              onTap: () => Navigator.pop(ctx, 'cards'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.lightbulb_outline),
+              title: const Text('Explain simply (Telugu)'),
+              onTap: () => Navigator.pop(ctx, 'simple_te'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.lightbulb_outline),
+              title: const Text('Explain simply (English)'),
+              onTap: () => Navigator.pop(ctx, 'simple_en'),
+            ),
+            ListTile(
               leading: const Icon(Icons.open_in_new),
               title: const Text('Open'),
               onTap: () => Navigator.pop(ctx, 'open'),
@@ -298,6 +382,14 @@ class _MyFilesPageState extends State<MyFilesPage> {
     );
     if (choice == 'help_te' || choice == 'help_en') {
       await helpFile(f, choice == 'help_en' ? 'en' : 'te');
+      return;
+    }
+    if (choice == 'cards') {
+      await startFlashcards(f);
+      return;
+    }
+    if (choice == 'simple_te' || choice == 'simple_en') {
+      await explainSimply(f, choice == 'simple_en' ? 'en' : 'te');
       return;
     }
     if (choice == 'quiz') {
@@ -728,6 +820,372 @@ class _TutorPageState extends State<TutorPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Text('Generate'),
+            ),
+            if (busy)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text('Creating... this can take up to 30 seconds.'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class WayvoFlashcardsPage extends StatefulWidget {
+  final String filename;
+  final List<Map<String, dynamic>> cards;
+  const WayvoFlashcardsPage({
+    super.key,
+    required this.filename,
+    required this.cards,
+  });
+
+  @override
+  State<WayvoFlashcardsPage> createState() => _WayvoFlashcardsPageState();
+}
+
+class _WayvoFlashcardsPageState extends State<WayvoFlashcardsPage> {
+  late List<int> queue = List<int>.generate(widget.cards.length, (i) => i);
+  int pos = 0;
+  bool flipped = false;
+  int known = 0;
+  final List<int> missed = [];
+
+  void mark(bool got) {
+    setState(() {
+      if (got) {
+        known++;
+      } else {
+        missed.add(queue[pos]);
+      }
+      pos++;
+      flipped = false;
+    });
+  }
+
+  void reviewMissed() {
+    setState(() {
+      queue = List<int>.from(missed);
+      missed.clear();
+      pos = 0;
+      flipped = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.cards.length;
+    final done = pos >= queue.length;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(done ? 'Flashcards done' : 'Card ${pos + 1} of ${queue.length}'),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: done ? _result(total) : _card(),
+        ),
+      ),
+    );
+  }
+
+  Widget _card() {
+    final c = widget.cards[queue[pos]];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => setState(() => flipped = !flipped),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: flipped ? const Color(0xFFDCFCE7) : Colors.white,
+                border: Border.all(color: Colors.black26),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      flipped ? 'ANSWER' : 'QUESTION',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      (flipped ? c['back'] : c['front']).toString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        height: 1.4,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (!flipped)
+                      const Text(
+                        'Tap to flip',
+                        style: TextStyle(color: Colors.black45),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (flipped)
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => mark(false),
+                  child: const Text('Review again'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => mark(true),
+                  child: const Text('Got it'),
+                ),
+              ),
+            ],
+          )
+        else
+          const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _result(int total) {
+    return ListView(
+      children: [
+        const SizedBox(height: 12),
+        Center(
+          child: Text(
+            '$known / $total',
+            style: const TextStyle(fontSize: 42, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const Center(child: Text('cards known')),
+        const SizedBox(height: 20),
+        if (missed.isNotEmpty)
+          FilledButton(
+            onPressed: reviewMissed,
+            child: Text('Review missed (${missed.length})'),
+          ),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Done'),
+        ),
+      ],
+    );
+  }
+}
+
+class StudyPage extends StatefulWidget {
+  const StudyPage({super.key});
+
+  @override
+  State<StudyPage> createState() => _StudyPageState();
+}
+
+class _StudyPageState extends State<StudyPage> {
+  final topicC = TextEditingController();
+  final subjectsC = TextEditingController();
+  final notesC = TextEditingController();
+  String mode = 'explain';
+  String lang = 'en';
+  double hours = 3;
+  DateTime? examDate;
+  bool busy = false;
+
+  @override
+  void dispose() {
+    topicC.dispose();
+    subjectsC.dispose();
+    notesC.dispose();
+    super.dispose();
+  }
+
+  void msg(String t) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+  }
+
+  Future<void> pickDate() async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: examDate ?? now.add(const Duration(days: 14)),
+      firstDate: now.add(const Duration(days: 1)),
+      lastDate: now.add(const Duration(days: 120)),
+    );
+    if (d != null) setState(() => examDate = d);
+  }
+
+  Future<void> generate() async {
+    if (busy) return;
+    String path;
+    Map<String, dynamic> body;
+    if (mode == 'explain') {
+      if (topicC.text.trim().isEmpty) {
+        msg('Please enter a topic.');
+        return;
+      }
+      path = '/api/study/explain';
+      body = {'topic': topicC.text.trim(), 'lang': lang};
+    } else {
+      if (subjectsC.text.trim().isEmpty || examDate == null) {
+        msg('Please enter your subjects and pick the exam date.');
+        return;
+      }
+      path = '/api/study/plan';
+      body = {
+        'subjects': subjectsC.text.trim(),
+        'exam_date': examDate!.toIso8601String().substring(0, 10),
+        'hours': hours,
+        'notes': notesC.text.trim(),
+        'lang': lang,
+      };
+    }
+    setState(() => busy = true);
+    try {
+      final r = await dio.post(
+        path,
+        data: body,
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (data['success'] == true) {
+        Navigator.pop<int>(context, data['chat_id'] as int);
+      } else {
+        msg((data['message'] ?? 'Could not create it').toString());
+      }
+    } on DioException catch (e) {
+      msg(
+        ((e.response?.data is Map ? e.response?.data['message'] : null) ??
+                'Could not create it. Try again.')
+            .toString(),
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Widget field(TextEditingController c, String label,
+      {String? hint, int lines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: c,
+        minLines: lines,
+        maxLines: lines == 1 ? 1 : lines + 2,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Study Buddy')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Explain a topic'),
+                  selected: mode == 'explain',
+                  onSelected: (_) => setState(() => mode = 'explain'),
+                ),
+                ChoiceChip(
+                  label: const Text('Exam planner'),
+                  selected: mode == 'plan',
+                  onSelected: (_) => setState(() => mode = 'plan'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (mode == 'explain')
+              field(topicC, 'Topic', hint: 'e.g. Photosynthesis', lines: 2)
+            else ...[
+              field(subjectsC, 'Subjects',
+                  hint: 'e.g. Maths, Physics, Chemistry'),
+              OutlinedButton.icon(
+                onPressed: pickDate,
+                icon: const Icon(Icons.event),
+                label: Text(
+                  examDate == null
+                      ? 'Pick exam date'
+                      : 'Exam: ${examDate!.toIso8601String().substring(0, 10)}',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text('Study hours per day: ${hours.toStringAsFixed(1)}'),
+              Slider(
+                value: hours,
+                min: 1,
+                max: 8,
+                divisions: 14,
+                label: hours.toStringAsFixed(1),
+                onChanged: (v) => setState(() => hours = v),
+              ),
+              field(notesC, 'Weak topics or notes (optional)',
+                  hint: 'e.g. Weak in trigonometry', lines: 2),
+            ],
+            const Text('Language',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('English'),
+                  selected: lang == 'en',
+                  onSelected: (_) => setState(() => lang = 'en'),
+                ),
+                ChoiceChip(
+                  label: const Text('Telugu'),
+                  selected: lang == 'te',
+                  onSelected: (_) => setState(() => lang = 'te'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: busy ? null : generate,
+              child: busy
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(mode == 'explain' ? 'Explain' : 'Create plan'),
             ),
             if (busy)
               const Padding(
