@@ -392,6 +392,7 @@ class _WayvoHomeState extends State<WayvoHome>
 
   final FlutterTts tts = FlutterTts();
   bool voiceMode = false;
+  bool interviewMode = false;
   bool speaking = false;
   bool sttReady = false;
   bool voiceGotResult = false;
@@ -933,6 +934,7 @@ class _WayvoHomeState extends State<WayvoHome>
       if (data['success'] == true && mounted) {
         setState(() {
           currentChatId = chatId;
+          interviewMode = false;
           messages.clear();
           for (final m in data['messages']) {
             messages.add({
@@ -993,6 +995,7 @@ class _WayvoHomeState extends State<WayvoHome>
           'style': prefs.getString('resp_style') ?? 'short',
           'message': message,
           'chat_id': currentChatId,
+          if (interviewMode) 'mode': 'interview',
         },
         options: Options(
           contentType: Headers.jsonContentType,
@@ -1442,7 +1445,21 @@ class _WayvoHomeState extends State<WayvoHome>
     }
   }
 
+  Future<void> startInterview() async {
+    if (sending) return;
+    startNewChat();
+    setState(() {
+      interviewMode = true;
+      voiceMode = true;
+    });
+    voiceStatus.value = 'Thinking…';
+    voiceText.value = '';
+    messageController.text = 'Start a mock interview for me.';
+    await sendMessage();
+  }
+
   void startNewChat() {
+    interviewMode = false;
     setState(() {
       messages.clear();
       currentChatId = null;
@@ -1534,6 +1551,11 @@ class _WayvoHomeState extends State<WayvoHome>
                   _sideItem(Icons.book_outlined, 'Diary'),
                   _sideItem(Icons.extension_outlined, 'Plugins'),
                   _sideItem(
+                    Icons.record_voice_over_outlined,
+                    'Interview Coach',
+                    onTap: startInterview,
+                  ),
+                  _sideItem(
                     Icons.calendar_month_outlined,
                     'Schedule / Interview',
                   ),
@@ -1621,6 +1643,11 @@ class _WayvoHomeState extends State<WayvoHome>
       _sideItem(Icons.code, 'Code'),
       _sideItem(Icons.book_outlined, 'Diary'),
       _sideItem(Icons.extension_outlined, 'Plugins'),
+      _sideItem(
+        Icons.record_voice_over_outlined,
+        'Interview Coach',
+        onTap: startInterview,
+      ),
       _sideItem(Icons.calendar_month_outlined, 'Schedule / Interview'),
       _sideItem(Icons.folder_outlined, 'Library'),
       _sideItem(Icons.terminal, 'Codex'),
