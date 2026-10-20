@@ -665,6 +665,16 @@ class _WayvoHomeState extends State<WayvoHome>
     }
   }
 
+  Future<void> openTutor() async {
+    if (historyOpen) setState(() => historyOpen = false);
+    final chatId = await Navigator.of(context)
+        .push<int>(MaterialPageRoute(builder: (_) => const TutorPage()));
+    if (chatId != null && mounted) {
+      await loadChats();
+      await openChat(chatId);
+    }
+  }
+
   Future<void> openMyFiles() async {
     if (historyOpen) setState(() => historyOpen = false);
     final chatId = await Navigator.of(context)
@@ -1551,6 +1561,11 @@ class _WayvoHomeState extends State<WayvoHome>
                   _sideItem(Icons.book_outlined, 'Diary'),
                   _sideItem(Icons.extension_outlined, 'Plugins'),
                   _sideItem(
+                    Icons.school_outlined,
+                    'Tutor Assistant',
+                    onTap: openTutor,
+                  ),
+                  _sideItem(
                     Icons.record_voice_over_outlined,
                     'Interview Coach',
                     onTap: startInterview,
@@ -1643,6 +1658,11 @@ class _WayvoHomeState extends State<WayvoHome>
       _sideItem(Icons.code, 'Code'),
       _sideItem(Icons.book_outlined, 'Diary'),
       _sideItem(Icons.extension_outlined, 'Plugins'),
+      _sideItem(
+        Icons.school_outlined,
+        'Tutor Assistant',
+        onTap: openTutor,
+      ),
       _sideItem(
         Icons.record_voice_over_outlined,
         'Interview Coach',

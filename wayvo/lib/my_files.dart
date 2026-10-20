@@ -555,3 +555,188 @@ class _WayvoQuizPageState extends State<WayvoQuizPage> {
     );
   }
 }
+
+
+class TutorPage extends StatefulWidget {
+  const TutorPage({super.key});
+
+  @override
+  State<TutorPage> createState() => _TutorPageState();
+}
+
+class _TutorPageState extends State<TutorPage> {
+  final clsC = TextEditingController();
+  final boardC = TextEditingController();
+  final subjectC = TextEditingController();
+  final topicC = TextEditingController();
+  final extraC = TextEditingController();
+  String kind = 'worksheet';
+  String lang = 'en';
+  bool busy = false;
+
+  static const kinds = <List<String>>[
+    ['worksheet', 'Worksheet'],
+    ['test', 'Test paper'],
+    ['answers', 'Practice Q&A'],
+    ['lesson', 'Lesson plan'],
+    ['parent', 'Parent message'],
+  ];
+
+  @override
+  void dispose() {
+    clsC.dispose();
+    boardC.dispose();
+    subjectC.dispose();
+    topicC.dispose();
+    extraC.dispose();
+    super.dispose();
+  }
+
+  void msg(String t) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+  }
+
+  Future<void> generate() async {
+    if (busy) return;
+    if (subjectC.text.trim().isEmpty ||
+        (kind != 'parent' && topicC.text.trim().isEmpty)) {
+      msg('Please enter the subject and topic.');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      final r = await dio.post(
+        '/api/tutor/generate',
+        data: {
+          'kind': kind,
+          'lang': lang,
+          'class': clsC.text.trim(),
+          'board': boardC.text.trim(),
+          'subject': subjectC.text.trim(),
+          'topic': topicC.text.trim(),
+          'extra': extraC.text.trim(),
+        },
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (data['success'] == true) {
+        Navigator.pop<int>(context, data['chat_id'] as int);
+      } else {
+        msg((data['message'] ?? 'Could not create it').toString());
+      }
+    } on DioException catch (e) {
+      msg(
+        ((e.response?.data is Map ? e.response?.data['message'] : null) ??
+                'Could not create it. Try again.')
+            .toString(),
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Widget field(TextEditingController c, String label,
+      {String? hint, int lines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: c,
+        minLines: lines,
+        maxLines: lines == 1 ? 1 : lines + 2,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Tutor Assistant')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('What do you want to create?',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final k in kinds)
+                  ChoiceChip(
+                    label: Text(k[1]),
+                    selected: kind == k[0],
+                    onSelected: (_) => setState(() => kind = k[0]),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            field(clsC, 'Class', hint: 'e.g. 8'),
+            field(boardC, 'Board (optional)', hint: 'e.g. AP, TS, CBSE'),
+            field(subjectC, 'Subject', hint: 'e.g. Maths'),
+            field(
+              topicC,
+              kind == 'parent' ? 'Topic (optional)' : 'Topic',
+              hint: 'e.g. Linear equations',
+            ),
+            field(
+              extraC,
+              kind == 'parent'
+                  ? 'Student name and your notes'
+                  : 'Extra notes (optional)',
+              hint: kind == 'parent'
+                  ? 'e.g. Ravi is good at algebra but careless in sums'
+                  : 'e.g. include word problems',
+              lines: 2,
+            ),
+            const Text('Language',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('English'),
+                  selected: lang == 'en',
+                  onSelected: (_) => setState(() => lang = 'en'),
+                ),
+                ChoiceChip(
+                  label: const Text('Telugu'),
+                  selected: lang == 'te',
+                  onSelected: (_) => setState(() => lang = 'te'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: busy ? null : generate,
+              child: busy
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Generate'),
+            ),
+            if (busy)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text('Creating... this can take up to 30 seconds.'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
