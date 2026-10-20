@@ -78,7 +78,7 @@ RATE_WINDOW = 60
 
 @app.before_request
 def wayvo_rate_limit():
-    if request.method != "POST" or request.path not in ("/api/chat", "/api/chat/stream"):
+    if request.method != "POST" or (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith("/quiz")):
         return None
     key = str(session.get("user_id") or request.remote_addr)
     now = _rl_time.time()
@@ -792,6 +792,91 @@ def delete_file(file_id):
     if not row:
         return jsonify({"success": False, "message": "File not found"}), 404
     return jsonify({"success": True})
+
+
+@app.route("/api/files/<int:file_id>/quiz", methods=["POST"])
+def quiz_file(file_id):
+    import json as _json
+    import random
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    data = request.get_json() or {}
+    try:
+        count = max(3, min(int(data.get("count", 8)), 15))
+    except Exception:
+        count = 8
+    conn = get_db()
+    row = conn.execute(
+        "SELECT filename, extracted_text, summary FROM user_files WHERE id = ? AND user_id = ?",
+        (file_id, session["user_id"])
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"success": False, "message": "File not found"}), 404
+    text = row["extracted_text"] or ""
+    if len(text.strip()) < 200:
+        return jsonify({"success": False, "message": "This file has too little text to make a quiz."}), 400
+    if len(text) <= 14000:
+        context = text
+    else:
+        mid = len(text) // 2
+        context = (
+            "SUMMARY OF WHOLE FILE:\n" + (row["summary"] or "")[:5000] +
+            "\n\nBEGINNING:\n" + text[:5000] +
+            "\n\nMIDDLE:\n" + text[mid:mid + 3000]
+        )
+    prompt = (
+        "Create exactly " + str(count) + " multiple-choice questions from the file content below. "
+        "Test understanding of the important ideas, not trivial details. Each question has exactly 4 options "
+        "with one correct answer and 3 believable wrong answers. Use the same language as the file. "
+        "Reply with ONLY valid JSON, no markdown, in this shape: "
+        '{"questions":[{"q":"question text","options":["A","B","C","D"],"answer":0,"explanation":"one short line"}]} '
+        "where answer is the 0-based index of the correct option.\n\nFILE: " + row["filename"] + "\n\n" + context
+    )
+    try:
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        resp = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {"role": "system", "content": "You write fair quiz questions and reply with JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            reasoning_effort="low",
+            max_tokens=4000,
+        )
+        raw = (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        print("QUIZ ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not create the quiz right now. Please try again."}), 500
+    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
+    a, b = raw.find("{"), raw.rfind("}")
+    try:
+        parsed = _json.loads(raw[a:b + 1])
+    except Exception:
+        print("QUIZ PARSE ERROR:", raw[:200])
+        return jsonify({"success": False, "message": "Could not read the quiz. Please try again."}), 500
+    out = []
+    for item in parsed.get("questions", []):
+        try:
+            opts = [str(o).strip() for o in item["options"]][:4]
+            ans = int(item["answer"])
+            q = str(item["q"]).strip()
+            if len(opts) != 4 or not 0 <= ans < 4 or not q:
+                continue
+            correct = opts[ans]
+            random.shuffle(opts)
+            out.append({
+                "q": q,
+                "options": opts,
+                "answer": opts.index(correct),
+                "explanation": str(item.get("explanation", "")).strip(),
+            })
+        except Exception:
+            continue
+    if len(out) < 2:
+        return jsonify({"success": False, "message": "Could not create a good quiz from this file."}), 500
+    return jsonify({"success": True, "filename": row["filename"], "questions": out[:count]})
 
 
 @app.route("/api/files/<int:file_id>/ask", methods=["POST"])
