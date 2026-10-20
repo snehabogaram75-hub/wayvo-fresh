@@ -2462,7 +2462,7 @@ class _WayvoHomeState extends State<WayvoHome>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    WayvoLinkText(
+                    WayvoRichMessage(
                       text: message['content'] ?? '',
                       style: TextStyle(
                         fontSize: 15,
@@ -4013,5 +4013,134 @@ class _WayvoLinkTextState extends State<WayvoLinkText> {
       spans.add(TextSpan(text: widget.text.substring(last)));
     }
     return Text.rich(TextSpan(style: widget.style, children: spans));
+  }
+}
+
+
+class WayvoRichMessage extends StatelessWidget {
+  final String text;
+  final TextStyle style;
+  final Color linkColor;
+  const WayvoRichMessage({
+    super.key,
+    required this.text,
+    required this.style,
+    required this.linkColor,
+  });
+
+  Widget _codeBlock(BuildContext context, String lang, String code) {
+    return SizedBox(
+      width: double.infinity,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E2E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: const BoxDecoration(
+                color: Color(0xFF2B2B40),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    lang.isEmpty ? 'code' : lang,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () async {
+                      await Clipboard.setData(ClipboardData(text: code));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Code copied'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      }
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.copy_rounded, size: 14, color: Colors.white70),
+                          SizedBox(width: 4),
+                          Text(
+                            'Copy',
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.all(12),
+              child: SelectableText(
+                code,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontFamilyFallback: ['Menlo', 'Courier', 'monospace'],
+                  fontSize: 13,
+                  height: 1.4,
+                  color: Color(0xFFE6E6F0),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!text.contains('```')) {
+      return WayvoLinkText(text: text, style: style, linkColor: linkColor);
+    }
+    final re = RegExp(r'```([A-Za-z0-9_+#.\-]*)[ \t]*\r?\n?([\s\S]*?)(```|$)');
+    final parts = <Widget>[];
+    int last = 0;
+    for (final m in re.allMatches(text)) {
+      if (m.start > last) {
+        final t = text.substring(last, m.start).trim();
+        if (t.isNotEmpty) {
+          parts.add(WayvoLinkText(text: t, style: style, linkColor: linkColor));
+        }
+      }
+      final lang = m.group(1) ?? '';
+      final code = (m.group(2) ?? '').replaceAll(RegExp(r'\s+$'), '');
+      parts.add(_codeBlock(context, lang, code));
+      last = m.end;
+    }
+    if (last < text.length) {
+      final t = text.substring(last).trim();
+      if (t.isNotEmpty) {
+        parts.add(WayvoLinkText(text: t, style: style, linkColor: linkColor));
+      }
+    }
+    if (parts.isEmpty) {
+      return WayvoLinkText(text: text, style: style, linkColor: linkColor);
+    }
+    final spaced = <Widget>[];
+    for (var i = 0; i < parts.length; i++) {
+      if (i > 0) spaced.add(const SizedBox(height: 6));
+      spaced.add(parts[i]);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: spaced,
+    );
   }
 }
