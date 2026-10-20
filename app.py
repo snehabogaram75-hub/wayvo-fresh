@@ -1570,7 +1570,7 @@ def build_files_block(user_id, message):
     )
 
 
-def ask_ollama(message, history, pref="short", stream_mode=False):
+def ask_ollama(message, history, pref="short", stream_mode=False, mode=""):
     conversation = ""
 
     for item in history[-12:]:
@@ -1626,6 +1626,27 @@ Current user question:
 
 WAYVO:
 """
+
+    if mode == "interview":
+        prompt = (
+            "You are WAYVO Interview Coach, a friendly but honest mock interviewer and spoken English coach. "
+            "Your replies are read aloud, so keep them short and use plain text only (no markdown symbols like * or #).\n"
+            "RULES:\n"
+            "1. If the user has not said which job role to practise for, ask which role in one short line.\n"
+            "2. Ask ONE interview question at a time, starting with easy ones and getting harder.\n"
+            "3. After each answer from the user, reply in exactly this format: "
+            "Feedback: (max 2 short lines, one good point and one thing to improve). "
+            "Better answer: (a clear improved version of their answer in 1-2 sentences, with correct grammar, in natural spoken English). "
+            "Score: X/10. "
+            "Next question: (one new question).\n"
+            "4. After 6 questions, or if the user says stop or end, give a final summary: overall score out of 10, "
+            "top 3 strengths, top 3 things to improve, and one practice tip. Do not ask another question after the summary.\n"
+            "5. If the user writes Telugu or Tanglish, give the Feedback in simple Tanglish (plain English letters), "
+            "but keep questions and the Better answer in English.\n"
+            "6. Never invent facts about the user. Be encouraging but honest.\n\n"
+            "Conversation so far:\n" + conversation +
+            "\nCandidate's latest message:\n" + message + "\n\nCOACH:\n"
+        )
 
     key = os.environ.get("GROQ_API_KEY")
     print("GROQ KEY STATUS:", "SET" if key else "MISSING", "LENGTH:", len(key) if key else 0)
@@ -1812,6 +1833,7 @@ def api_chat_stream():
     history = session.get("chat_history", [])
     style = data.get("style") or "short"
     user_id = session["user_id"]
+    mode = "interview" if data.get("mode") == "interview" else ""
 
     conn = get_db()
     chat_id = session.get("chat_id")
@@ -1840,7 +1862,7 @@ def api_chat_stream():
         yield _json.dumps({"chat_id": chat_id}) + "\n"
         full = ""
         try:
-            stream = ask_ollama(message, history, style, stream_mode=True)
+            stream = ask_ollama(message, history, style, stream_mode=True, mode=mode)
             for chunk in stream:
                 if not chunk.choices:
                     continue
