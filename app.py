@@ -78,7 +78,7 @@ RATE_WINDOW = 60
 
 @app.before_request
 def wayvo_rate_limit():
-    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith("/quiz")):
+    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper"))):
         return None
     key = str(session.get("user_id") or request.remote_addr)
     now = _rl_time.time()
@@ -792,6 +792,89 @@ def delete_file(file_id):
     if not row:
         return jsonify({"success": False, "message": "File not found"}), 404
     return jsonify({"success": True})
+
+
+@app.route("/api/files/<int:file_id>/helper", methods=["POST"])
+def helper_file(file_id):
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    data = request.get_json() or {}
+    lang = "en" if data.get("lang") == "en" else "te"
+    conn = get_db()
+    row = conn.execute(
+        "SELECT filename, extracted_text, summary FROM user_files WHERE id = ? AND user_id = ?",
+        (file_id, session["user_id"])
+    ).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"success": False, "message": "File not found"}), 404
+    text = (row["extracted_text"] or "").strip()
+    if len(text) < 30:
+        conn.close()
+        return jsonify({"success": False, "message": "I could not read any text in this file."}), 400
+    if len(text) <= 14000:
+        context = text
+    else:
+        context = (
+            "SUMMARY OF WHOLE FILE:\n" + (row["summary"] or "")[:8000] +
+            "\n\nSTART OF FILE:\n" + text[:6000]
+        )
+    if lang == "te":
+        lang_rule = (
+            "Reply in simple, everyday Telugu written in Telugu script. Keep official words, names, "
+            "numbers, dates and amounts exactly as they appear in the file."
+        )
+        user_line = "ఈ ఫైల్ గురించి సులభంగా వివరించండి: "
+    else:
+        lang_rule = "Reply in simple, clear English."
+        user_line = "Explain this file in a simple way: "
+    system = (
+        "You are WAYVO Document Helper for people who find official papers confusing. "
+        "Use ONLY the file content. Never invent amounts, dates or rules; if something is missing or unclear, say so. "
+        + lang_rule +
+        " Use these short numbered sections: 1) What this document is. 2) Key details (names, amounts, dates, last date). "
+        "3) What I need to do next, step by step. 4) If a reply or letter is needed, a short ready-to-send draft "
+        "(skip this section if not needed). 5) Warning: one line if there is a penalty, deadline or risk. "
+        "If it is a legal, tax or medical matter, end with one line to confirm with the official office or a professional. "
+        "Plain text only, no markdown symbols like * or #."
+    )
+    try:
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        resp = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": "File: " + row["filename"] + "\n\n" + context},
+            ],
+            temperature=0.3,
+            reasoning_effort="low",
+            max_tokens=4000,
+        )
+        reply = (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        print("HELPER ERROR:", repr(e))
+        conn.close()
+        return jsonify({"success": False, "message": "Could not explain the file right now. Please try again."}), 500
+    if not reply:
+        conn.close()
+        return jsonify({"success": False, "message": "Could not explain the file right now. Please try again."}), 500
+    title = ("Doc help: " + row["filename"])[:40]
+    cursor = conn.execute(
+        "INSERT INTO chats (user_id, title) VALUES (?, ?)",
+        (session["user_id"], title)
+    )
+    chat_id = cursor.lastrowid
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "You", user_line + row["filename"])
+    )
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "WAYVO", reply)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
 
 
 @app.route("/api/files/<int:file_id>/quiz", methods=["POST"])
