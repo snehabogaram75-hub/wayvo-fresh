@@ -78,7 +78,7 @@ RATE_WINDOW = 60
 
 @app.before_request
 def wayvo_rate_limit():
-    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper", "/generate"))):
+    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper", "/generate", "/flashcards", "/explain", "/plan"))):
         return None
     key = str(session.get("user_id") or request.remote_addr)
     now = _rl_time.time()
@@ -792,6 +792,224 @@ def delete_file(file_id):
     if not row:
         return jsonify({"success": False, "message": "File not found"}), 404
     return jsonify({"success": True})
+
+
+def _save_gen_chat(user_id, title, user_line, reply):
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO chats (user_id, title) VALUES (?, ?)",
+        (user_id, title[:40])
+    )
+    chat_id = cursor.lastrowid
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "You", user_line)
+    )
+    conn.execute(
+        "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, "WAYVO", reply)
+    )
+    conn.commit()
+    conn.close()
+    return chat_id
+
+
+def _groq_text(system, user, max_tokens=4000, temperature=0.3):
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    resp = client.chat.completions.create(
+        model="openai/gpt-oss-20b",
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=temperature,
+        reasoning_effort="low",
+        max_tokens=max_tokens,
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+def _file_context(row):
+    text = (row["extracted_text"] or "").strip()
+    if len(text) <= 14000:
+        return text
+    mid = len(text) // 2
+    return (
+        "SUMMARY OF WHOLE FILE:\n" + (row["summary"] or "")[:5000] +
+        "\n\nBEGINNING:\n" + text[:5000] +
+        "\n\nMIDDLE:\n" + text[mid:mid + 3000]
+    )
+
+
+@app.route("/api/files/<int:file_id>/flashcards", methods=["POST"])
+def flashcards_file(file_id):
+    import json as _json
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    try:
+        count = max(6, min(int(d.get("count", 12)), 20))
+    except Exception:
+        count = 12
+    conn = get_db()
+    row = conn.execute(
+        "SELECT filename, extracted_text, summary FROM user_files WHERE id = ? AND user_id = ?",
+        (file_id, session["user_id"])
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"success": False, "message": "File not found"}), 404
+    if len((row["extracted_text"] or "").strip()) < 200:
+        return jsonify({"success": False, "message": "This file has too little text to make flashcards."}), 400
+    prompt = (
+        "Create exactly " + str(count) + " study flashcards from the file content below. "
+        "Each card has a short front (a term, question or concept) and a clear back (a short answer or explanation, max 2 sentences). "
+        "Cover the most important ideas. Use the same language as the file. "
+        "Reply with ONLY valid JSON, no markdown, in this shape: "
+        '{"cards":[{"front":"...","back":"..."}]}\n\nFILE: ' + row["filename"] + "\n\n" + _file_context(row)
+    )
+    try:
+        raw = _groq_text("You write clear study flashcards and reply with JSON only.", prompt, 4000, 0.3)
+    except Exception as e:
+        print("FLASHCARD ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not create flashcards right now. Please try again."}), 500
+    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
+    a, b = raw.find("{"), raw.rfind("}")
+    try:
+        parsed = _json.loads(raw[a:b + 1])
+    except Exception:
+        print("FLASHCARD PARSE ERROR:", raw[:200])
+        return jsonify({"success": False, "message": "Could not read the flashcards. Please try again."}), 500
+    cards = []
+    for item in parsed.get("cards", []):
+        try:
+            front = str(item.get("front", "")).strip()
+            back = str(item.get("back", "")).strip()
+            if front and back:
+                cards.append({"front": front[:300], "back": back[:600]})
+        except Exception:
+            continue
+    if len(cards) < 3:
+        return jsonify({"success": False, "message": "Could not create good flashcards from this file."}), 500
+    return jsonify({"success": True, "filename": row["filename"], "cards": cards[:count]})
+
+
+@app.route("/api/study/explain", methods=["POST"])
+def study_explain():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    lang = "te" if d.get("lang") == "te" else "en"
+    topic = str(d.get("topic", "")).strip()[:300]
+    context = ""
+    fname = ""
+    if d.get("file_id"):
+        try:
+            fid = int(d.get("file_id"))
+        except Exception:
+            fid = 0
+        conn = get_db()
+        row = conn.execute(
+            "SELECT filename, extracted_text, summary FROM user_files WHERE id = ? AND user_id = ?",
+            (fid, session["user_id"])
+        ).fetchone()
+        conn.close()
+        if not row:
+            return jsonify({"success": False, "message": "File not found"}), 404
+        fname = row["filename"]
+        context = _file_context(row)
+    if not topic and not context:
+        return jsonify({"success": False, "message": "Please enter a topic or pick a file."}), 400
+    if lang == "te":
+        lang_rule = "Write in very simple spoken-style Telugu in Telugu script, keeping standard technical terms as usual."
+    else:
+        lang_rule = "Write in very simple English."
+    system = (
+        "You are WAYVO Study Buddy. Explain the topic as if the student is 10 years old: very simple words, short sentences, "
+        "and one everyday example or analogy. Then add a 3-line summary, then 2 quick check questions with their answers. "
+        "If a file is given, use ONLY the file content and focus on the topic asked (if no topic is given, explain the main idea of the file). "
+        "If you are not sure about something, say so. " + lang_rule +
+        " Plain text only, no markdown symbols like * or #."
+    )
+    user = "Topic: " + (topic or "main idea of the file") + "\n"
+    if context:
+        user += "\nFILE: " + fname + "\n\n" + context
+    try:
+        reply = _groq_text(system, user, 3500, 0.4)
+    except Exception as e:
+        print("EXPLAIN ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not explain right now. Please try again."}), 500
+    if not reply:
+        return jsonify({"success": False, "message": "Could not explain right now. Please try again."}), 500
+    chat_id = _save_gen_chat(
+        session["user_id"],
+        "Explain: " + (topic or fname),
+        "Explain simply: " + (topic or fname),
+        reply,
+    )
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
+
+
+@app.route("/api/study/plan", methods=["POST"])
+def study_plan():
+    import datetime as _dt
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    lang = "te" if d.get("lang") == "te" else "en"
+    subjects = str(d.get("subjects", "")).strip()[:300]
+    notes = str(d.get("notes", "")).strip()[:400]
+    try:
+        exam = _dt.date.fromisoformat(str(d.get("exam_date", "")).strip())
+    except Exception:
+        return jsonify({"success": False, "message": "Please pick the exam date."}), 400
+    try:
+        hours = float(d.get("hours", 3))
+    except Exception:
+        hours = 3.0
+    hours = max(0.5, min(hours, 12.0))
+    today = _dt.date.today()
+    days = (exam - today).days
+    if not subjects:
+        return jsonify({"success": False, "message": "Please enter your subjects."}), 400
+    if days < 1:
+        return jsonify({"success": False, "message": "The exam date must be in the future."}), 400
+    if days > 120:
+        return jsonify({"success": False, "message": "Please pick an exam date within the next 120 days."}), 400
+    if lang == "te":
+        lang_rule = "Write in simple Telugu script, keeping subject names and standard terms as usual."
+    else:
+        lang_rule = "Write in simple English."
+    system = (
+        "You are WAYVO Study Buddy. Create a realistic day-by-day exam study plan. "
+        "Rules: use the exact dates; never plan more than the hours per day given; mix subjects across days and give harder or weaker "
+        "subjects more time; add one lighter day each week; keep the last 2 days for revision and a mock test; "
+        "for each day list the subject and what to study with the time split. "
+        "If there are more than 21 days, give a weekly overview first and then the full day-by-day list for the first 7 days, "
+        "and say that the next week's days can be asked for later. " + lang_rule +
+        " Plain text only, no markdown symbols like * or # and no tables."
+    )
+    user = (
+        "Today: " + today.isoformat() + "\n"
+        "Exam date: " + exam.isoformat() + " (" + str(days) + " days left)\n"
+        "Study hours per day: " + str(hours) + "\n"
+        "Subjects: " + subjects + "\n"
+        "Notes (weak topics etc.): " + (notes or "none")
+    )
+    try:
+        reply = _groq_text(system, user, 5000, 0.4)
+    except Exception as e:
+        print("PLAN ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not create the plan right now. Please try again."}), 500
+    if not reply:
+        return jsonify({"success": False, "message": "Could not create the plan right now. Please try again."}), 500
+    chat_id = _save_gen_chat(
+        session["user_id"],
+        "Study plan: " + subjects,
+        "Study plan | " + subjects + " | exam " + exam.isoformat() + " | " + str(hours) + " h/day",
+        reply,
+    )
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
 
 
 @app.route("/api/tutor/generate", methods=["POST"])
