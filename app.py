@@ -1274,6 +1274,14 @@ _SHORT_RE = re.compile(
 )
 
 
+_CODE_RE = re.compile(
+    r"(?:\b(?:write|give|create|build|make|generate|implement|show|ivvu|rayi|raayi|chey|cheyyi)\b.{0,80}?"
+    r"\b(?:code|program|script|project|app|application|function|class|pipeline|notebook|rag|api)\b)"
+    r"|(?:\b(?:full|complete|entire|whole)\s+(?:code|project|program|script)\b)|```",
+    re.I | re.S,
+)
+
+
 def response_style(message, pref="short"):
     """Return (style_rule_text, max_tokens)."""
     if _SHORT_RE.search(message) and not _DETAIL_RE.search(message):
@@ -1281,6 +1289,13 @@ def response_style(message, pref="short"):
             "LENGTH: The user wants it very short. Reply in 1-2 sentences "
             "maximum, no lists, no headings.",
             250,
+        )
+    if _CODE_RE.search(message) and not _SHORT_RE.search(message):
+        return (
+            "LENGTH: The user asked for code or a technical build. Give the COMPLETE working code in fenced code blocks. "
+            "Never cut it short and never replace parts with placeholders like '...'. Add only a few short lines of explanation. "
+            "If it is very long, split it into clearly numbered files or parts.",
+            6000,
         )
     if _DETAIL_RE.search(message) or len(message) > 600:
         return (
