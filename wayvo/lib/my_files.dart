@@ -179,6 +179,46 @@ class _MyFilesPageState extends State<MyFilesPage> {
     }
   }
 
+  Future<void> startQuiz(dynamic f) async {
+    setState(() => busy = true);
+    try {
+      final r = await dio.post(
+        '/api/files/${f['id']}/quiz',
+        data: {'count': 8},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (data['success'] == true) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => WayvoQuizPage(
+              filename: (data['filename'] ?? f['filename']).toString(),
+              questions: List<Map<String, dynamic>>.from(
+                (data['questions'] as List).map(
+                  (e) => Map<String, dynamic>.from(e as Map),
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        snack(data['message'] ?? 'Could not create the quiz');
+      }
+    } on DioException catch (e) {
+      snack(
+        (e.response?.data is Map ? e.response?.data['message'] : null) ??
+            'Could not create the quiz. Try again.',
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> showOptions(dynamic f) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -197,6 +237,11 @@ class _MyFilesPageState extends State<MyFilesPage> {
               onTap: () => Navigator.pop(ctx, 'ask'),
             ),
             ListTile(
+              leading: const Icon(Icons.quiz_outlined),
+              title: const Text('Make a quiz'),
+              onTap: () => Navigator.pop(ctx, 'quiz'),
+            ),
+            ListTile(
               leading: const Icon(Icons.open_in_new),
               title: const Text('Open'),
               onTap: () => Navigator.pop(ctx, 'open'),
@@ -211,6 +256,10 @@ class _MyFilesPageState extends State<MyFilesPage> {
         ),
       ),
     );
+    if (choice == 'quiz') {
+      await startQuiz(f);
+      return;
+    }
     if (choice == 'ask') {
       await askFile(f);
     } else if (choice == 'open') {
@@ -283,6 +332,182 @@ class _MyFilesPageState extends State<MyFilesPage> {
             ),
         ],
       ),
+    );
+  }
+}
+
+
+class WayvoQuizPage extends StatefulWidget {
+  final String filename;
+  final List<Map<String, dynamic>> questions;
+  const WayvoQuizPage({
+    super.key,
+    required this.filename,
+    required this.questions,
+  });
+
+  @override
+  State<WayvoQuizPage> createState() => _WayvoQuizPageState();
+}
+
+class _WayvoQuizPageState extends State<WayvoQuizPage> {
+  int index = 0;
+  int score = 0;
+  int? picked;
+  final List<int> missed = [];
+
+  void pick(int i) {
+    if (picked != null) return;
+    final correct = (widget.questions[index]['answer'] as num).toInt();
+    setState(() {
+      picked = i;
+      if (i == correct) {
+        score++;
+      } else {
+        missed.add(index);
+      }
+    });
+  }
+
+  void next() {
+    setState(() {
+      index++;
+      picked = null;
+    });
+  }
+
+  void restart() {
+    setState(() {
+      index = 0;
+      score = 0;
+      picked = null;
+      missed.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.questions.length;
+    final done = index >= total;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(done ? 'Quiz result' : 'Question ${index + 1} of $total'),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: done ? _result(total) : _question(total),
+        ),
+      ),
+    );
+  }
+
+  Widget _question(int total) {
+    final qd = widget.questions[index];
+    final options = List<String>.from(
+      (qd['options'] as List).map((e) => e.toString()),
+    );
+    final correct = (qd['answer'] as num).toInt();
+    final explanation = (qd['explanation'] ?? '').toString();
+    return ListView(
+      children: [
+        LinearProgressIndicator(
+          value: (index + (picked == null ? 0 : 1)) / total,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          qd['q'].toString(),
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 16),
+        for (var i = 0; i < options.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => pick(i),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: picked == null
+                      ? Colors.white
+                      : (i == correct
+                          ? const Color(0xFFDCFCE7)
+                          : (i == picked
+                              ? const Color(0xFFFEE2E2)
+                              : Colors.white)),
+                  border: Border.all(
+                    color: picked == null
+                        ? Colors.black26
+                        : (i == correct
+                            ? const Color(0xFF16A34A)
+                            : (i == picked
+                                ? const Color(0xFFDC2626)
+                                : Colors.black12)),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  options[i],
+                  style: const TextStyle(fontSize: 15, color: Colors.black87),
+                ),
+              ),
+            ),
+          ),
+        if (picked != null) ...[
+          if (explanation.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(explanation, style: const TextStyle(height: 1.4)),
+            ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: next,
+            child: Text(index + 1 == total ? 'See result' : 'Next'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _result(int total) {
+    final pct = total == 0 ? 0 : (score * 100 / total).round();
+    return ListView(
+      children: [
+        const SizedBox(height: 12),
+        Center(
+          child: Text(
+            '$score / $total',
+            style: const TextStyle(fontSize: 42, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Center(child: Text('$pct% correct')),
+        const SizedBox(height: 16),
+        if (missed.isNotEmpty)
+          const Text(
+            'Review these:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        for (final m in missed)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              '${widget.questions[m]['q']}\nAnswer: ${(widget.questions[m]['options'] as List)[(widget.questions[m]['answer'] as num).toInt()]}',
+              style: const TextStyle(height: 1.4),
+            ),
+          ),
+        const SizedBox(height: 20),
+        FilledButton(onPressed: restart, child: const Text('Try again')),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Done'),
+        ),
+      ],
     );
   }
 }
