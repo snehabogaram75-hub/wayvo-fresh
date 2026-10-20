@@ -179,6 +179,35 @@ class _MyFilesPageState extends State<MyFilesPage> {
     }
   }
 
+  Future<void> helpFile(dynamic f, String lang) async {
+    setState(() => busy = true);
+    try {
+      final r = await dio.post(
+        '/api/files/${f['id']}/helper',
+        data: {'lang': lang},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (data['success'] == true) {
+        Navigator.pop<int>(context, data['chat_id'] as int);
+      } else {
+        snack(data['message'] ?? 'Could not explain the file');
+      }
+    } on DioException catch (e) {
+      snack(
+        (e.response?.data is Map ? e.response?.data['message'] : null) ??
+            'Could not explain the file. Try again.',
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> startQuiz(dynamic f) async {
     setState(() => busy = true);
     try {
@@ -237,6 +266,17 @@ class _MyFilesPageState extends State<MyFilesPage> {
               onTap: () => Navigator.pop(ctx, 'ask'),
             ),
             ListTile(
+              leading: const Icon(Icons.translate),
+              title: const Text('Explain in Telugu'),
+              subtitle: const Text('What it is, key details, what to do next'),
+              onTap: () => Navigator.pop(ctx, 'help_te'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Explain in English'),
+              onTap: () => Navigator.pop(ctx, 'help_en'),
+            ),
+            ListTile(
               leading: const Icon(Icons.quiz_outlined),
               title: const Text('Make a quiz'),
               onTap: () => Navigator.pop(ctx, 'quiz'),
@@ -256,6 +296,10 @@ class _MyFilesPageState extends State<MyFilesPage> {
         ),
       ),
     );
+    if (choice == 'help_te' || choice == 'help_en') {
+      await helpFile(f, choice == 'help_en' ? 'en' : 'te');
+      return;
+    }
     if (choice == 'quiz') {
       await startQuiz(f);
       return;
