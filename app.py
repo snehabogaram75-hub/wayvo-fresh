@@ -78,7 +78,7 @@ RATE_WINDOW = 60
 
 @app.before_request
 def wayvo_rate_limit():
-    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper", "/generate", "/flashcards", "/explain", "/plan")) or request.path.startswith("/api/shop/")):
+    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper", "/generate", "/flashcards", "/explain", "/plan")) or request.path.startswith("/api/shop/") or request.path.startswith("/api/plant/")):
         return None
     key = str(session.get("user_id") or request.remote_addr)
     now = _rl_time.time()
@@ -1231,6 +1231,153 @@ def shop_bill():
     chat_id = _save_gen_chat(
         session["user_id"], "Bill: " + (customer or shop or "customer"),
         "Bill for " + str(len(rows)) + " items", reply
+    )
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
+
+
+def _plant_terms(text):
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9_/.\-]*", (text or "").lower())
+    out = []
+    for w in words:
+        w = w.strip("-_/.")
+        if len(w) < 2 or w in _RAG_STOP or w in out:
+            continue
+        out.append(w)
+    return out[:14]
+
+
+@app.route("/api/plant/ask", methods=["POST"])
+def plant_ask():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    question = str(d.get("question", "")).strip()[:600]
+    lang = "te" if d.get("lang") == "te" else "en"
+    if not question:
+        return jsonify({"success": False, "message": "Please type your question."}), 400
+    terms = _plant_terms(question)
+    if re.search(r"[\u0c00-\u0c7f]", question):
+        try:
+            kw = _groq_text(
+                "Translate the user's question into short English search keywords for a boiler plant manual or SOP. "
+                "Reply with only the keywords separated by spaces.",
+                question, 300, 0.1
+            )
+            terms = _plant_terms(question + " " + kw)
+        except Exception as e:
+            print("PLANT KEYWORD ERROR:", repr(e))
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, filename, extracted_text FROM user_files "
+        "WHERE user_id = ? AND extracted_text IS NOT NULL ORDER BY id DESC LIMIT 40",
+        (session["user_id"],)
+    ).fetchall()
+    conn.close()
+    need = 2 if len(terms) >= 3 else 1
+    cands = []
+    if terms:
+        for r in rows:
+            text = " ".join((r["extracted_text"] or "").split())
+            if not text:
+                continue
+            total_parts = max(1, (len(text) + 999) // 1000)
+            for ci, i in enumerate(range(0, len(text), 1000)):
+                chunk = text[max(0, i - 150): i + 1150]
+                low = chunk.lower()
+                distinct = sum(1 for t in terms if t in low)
+                if distinct < need:
+                    continue
+                freq = sum(low.count(t) for t in terms)
+                cands.append((distinct, freq, r["filename"], ci + 1, total_parts, chunk))
+    cands.sort(key=lambda x: (-x[0], -x[1]))
+    parts = []
+    used = 0
+    for distinct, freq, fname, part, total_parts, chunk in cands[:6]:
+        if used + len(chunk) > 8000:
+            break
+        parts.append("[File: " + fname + " | part " + str(part) + " of " + str(total_parts) + "]\n" + chunk)
+        used += len(chunk)
+    if not parts:
+        if lang == "te":
+            reply = (
+                "మీ అప్‌లోడ్ చేసిన డాక్యుమెంట్లలో ఈ ప్రశ్నకు సంబంధించిన సమాచారం దొరకలేదు. "
+                "సంబంధిత SOP లేదా మాన్యువల్‌ను My Files లో అప్‌లోడ్ చేయండి, లేదా ప్రశ్నను వేరే పదాలతో అడగండి. "
+                "అంచనాతో సమాధానం ఇవ్వను."
+            )
+        else:
+            reply = (
+                "I could not find anything about this in your uploaded documents. "
+                "Upload the relevant SOP or manual in My Files, or try asking with different words. "
+                "I will not guess an answer for plant operations."
+            )
+    else:
+        lang_rule = (
+            "Answer in simple Telugu in Telugu script, but keep equipment names, numbers, units and tags exactly as written in the document."
+            if lang == "te" else "Answer in clear, simple English."
+        )
+        system = (
+            "You are WAYVO Plant Copilot for boiler plant operators. Answer ONLY from the document excerpts given. "
+            "Quote exact values, limits, tags and units as written there. Never guess or add values that are not in the excerpts. "
+            "If the excerpts do not contain the answer, say clearly that it was not found in the documents. "
+            "After the answer, add a line 'Source:' with the file name and part number you used. "
+            "If the answer involves starting, stopping, tripping, bypassing, isolating or changing any equipment or setpoint, "
+            "end with one line: Follow your site SOP and confirm with your shift supervisor before acting. "
+            + lang_rule + " Plain text only, no markdown symbols like * or #."
+        )
+        user = "QUESTION: " + question + "\n\nDOCUMENT EXCERPTS:\n\n" + "\n\n".join(parts)
+        try:
+            reply = _groq_text(system, user, 3500, 0.2)
+        except Exception as e:
+            print("PLANT ASK ERROR:", repr(e))
+            return jsonify({"success": False, "message": "Could not answer right now. Please try again."}), 500
+        if not reply:
+            return jsonify({"success": False, "message": "Could not answer right now. Please try again."}), 500
+    chat_id = _save_gen_chat(session["user_id"], "Plant: " + question, question, reply)
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
+
+
+@app.route("/api/plant/handover", methods=["POST"])
+def plant_handover():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    lang = "te" if d.get("lang") == "te" else "en"
+    unit = str(d.get("unit", "")).strip()[:80]
+    shift = str(d.get("shift", "")).strip()[:40]
+    when = str(d.get("date", "")).strip()[:30]
+    status = str(d.get("status", "")).strip()[:1500]
+    issues = str(d.get("issues", "")).strip()[:1500]
+    pending = str(d.get("pending", "")).strip()[:1500]
+    if not (status or issues or pending):
+        return jsonify({"success": False, "message": "Please enter at least one detail."}), 400
+    lang_rule = (
+        "Write in simple Telugu in Telugu script, keeping equipment names, tags, numbers and units exactly as given."
+        if lang == "te" else "Write in clear, simple English."
+    )
+    system = (
+        "You are WAYVO Plant Copilot. Write a clean shift handover note for a boiler plant from the operator's notes. "
+        "Use ONLY the details given; never invent readings, equipment states, times or names. If a section has no information, write: Not reported. "
+        "Use these sections in order: 1) Unit, shift and date. 2) Running status. 3) Issues and alarms. "
+        "4) Actions already taken. 5) Pending actions (mark priority High, Medium or Low only if the notes make it clear). "
+        "6) Points the next shift should watch. Keep every line short. " + lang_rule +
+        " Plain text only, no markdown symbols like * or # and no tables."
+    )
+    user = (
+        "Unit: " + (unit or "not given") + "\nShift: " + (shift or "not given") + "\nDate: " + (when or "not given") +
+        "\n\nRunning status notes:\n" + (status or "none") +
+        "\n\nIssues and alarms:\n" + (issues or "none") +
+        "\n\nPending actions:\n" + (pending or "none")
+    )
+    try:
+        reply = _groq_text(system, user, 2500, 0.2)
+    except Exception as e:
+        print("HANDOVER ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not write the note right now. Please try again."}), 500
+    if not reply:
+        return jsonify({"success": False, "message": "Could not write the note right now. Please try again."}), 500
+    chat_id = _save_gen_chat(
+        session["user_id"], "Handover: " + (unit or "plant"),
+        "Shift handover | " + (unit or "-") + " | " + (shift or "-") + " | " + (when or "-"), reply
     )
     return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
 
