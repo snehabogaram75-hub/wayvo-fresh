@@ -1198,3 +1198,311 @@ class _StudyPageState extends State<StudyPage> {
     );
   }
 }
+
+
+class ShopPage extends StatefulWidget {
+  const ShopPage({super.key});
+
+  @override
+  State<ShopPage> createState() => _ShopPageState();
+}
+
+class _ShopPageState extends State<ShopPage> {
+  String mode = 'sales';
+  String lang = 'en';
+  String msgKind = 'offer';
+  double gst = 0;
+  int? fileId;
+  List<Map<String, dynamic>> sheets = [];
+  bool loadingFiles = true;
+  bool busy = false;
+  final shopC = TextEditingController();
+  final detailsC = TextEditingController();
+  final customerC = TextEditingController();
+  final itemsC = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    loadFiles();
+  }
+
+  @override
+  void dispose() {
+    shopC.dispose();
+    detailsC.dispose();
+    customerC.dispose();
+    itemsC.dispose();
+    super.dispose();
+  }
+
+  void msg(String t) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+  }
+
+  Future<void> loadFiles() async {
+    try {
+      final r = await dio.get('/api/files');
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      final all = List<Map<String, dynamic>>.from(
+        (data['files'] as List).map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+      final ok = all.where((f) {
+        final n = (f['filename'] ?? '').toString().toLowerCase();
+        return n.endsWith('.csv') ||
+            n.endsWith('.xlsx') ||
+            n.endsWith('.xls') ||
+            n.endsWith('.xlsm');
+      }).toList();
+      if (!mounted) return;
+      setState(() {
+        sheets = ok;
+        if (ok.isNotEmpty) fileId = (ok.first['id'] as num).toInt();
+        loadingFiles = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() => loadingFiles = false);
+    }
+  }
+
+  Future<void> generate() async {
+    if (busy) return;
+    String path;
+    Map<String, dynamic> body;
+    if (mode == 'sales') {
+      if (fileId == null) {
+        msg('Upload an Excel or CSV sales file in My Files first.');
+        return;
+      }
+      path = '/api/shop/sales';
+      body = {'file_id': fileId, 'lang': lang};
+    } else if (mode == 'message') {
+      if (detailsC.text.trim().isEmpty) {
+        msg('Please enter the details.');
+        return;
+      }
+      path = '/api/shop/message';
+      body = {
+        'kind': msgKind,
+        'lang': lang,
+        'shop': shopC.text.trim(),
+        'details': detailsC.text.trim(),
+      };
+    } else {
+      if (itemsC.text.trim().isEmpty) {
+        msg('Please enter the items.');
+        return;
+      }
+      path = '/api/shop/bill';
+      body = {
+        'shop': shopC.text.trim(),
+        'customer': customerC.text.trim(),
+        'items': itemsC.text,
+        'gst': gst,
+      };
+    }
+    setState(() => busy = true);
+    try {
+      final r = await dio.post(
+        path,
+        data: body,
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (data['success'] == true) {
+        Navigator.pop<int>(context, data['chat_id'] as int);
+      } else {
+        msg((data['message'] ?? 'Could not create it').toString());
+      }
+    } on DioException catch (e) {
+      msg(
+        ((e.response?.data is Map ? e.response?.data['message'] : null) ??
+                'Could not create it. Try again.')
+            .toString(),
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Widget field(TextEditingController c, String label,
+      {String? hint, int lines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: c,
+        minLines: lines,
+        maxLines: lines == 1 ? 1 : lines + 3,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  Widget langChips() {
+    return Wrap(
+      spacing: 8,
+      children: [
+        ChoiceChip(
+          label: const Text('English'),
+          selected: lang == 'en',
+          onSelected: (_) => setState(() => lang = 'en'),
+        ),
+        ChoiceChip(
+          label: const Text('Telugu'),
+          selected: lang == 'te',
+          onSelected: (_) => setState(() => lang = 'te'),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = mode == 'sales'
+        ? 'Summarize sales'
+        : (mode == 'message' ? 'Write messages' : 'Make bill');
+    return Scaffold(
+      appBar: AppBar(title: const Text('Shop Helper')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Sales summary'),
+                  selected: mode == 'sales',
+                  onSelected: (_) => setState(() => mode = 'sales'),
+                ),
+                ChoiceChip(
+                  label: const Text('Customer message'),
+                  selected: mode == 'message',
+                  onSelected: (_) => setState(() => mode = 'message'),
+                ),
+                ChoiceChip(
+                  label: const Text('Bill maker'),
+                  selected: mode == 'bill',
+                  onSelected: (_) => setState(() => mode = 'bill'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (mode == 'sales') ...[
+              if (loadingFiles)
+                const Center(child: CircularProgressIndicator())
+              else if (sheets.isEmpty)
+                const Text(
+                  'No Excel or CSV file found. Upload your sales file in My Files first (columns like date, item, quantity, amount, stock).',
+                )
+              else ...[
+                const Text('Sales file',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                DropdownButton<int>(
+                  isExpanded: true,
+                  value: fileId,
+                  items: [
+                    for (final f in sheets)
+                      DropdownMenuItem<int>(
+                        value: (f['id'] as num).toInt(),
+                        child: Text(
+                          (f['filename'] ?? '').toString(),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => fileId = v),
+                ),
+                const SizedBox(height: 12),
+                const Text('Language',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                langChips(),
+              ],
+            ],
+            if (mode == 'message') ...[
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final k in const [
+                    ['offer', 'Offer'],
+                    ['reminder', 'Payment reminder'],
+                    ['festival', 'Festival wishes'],
+                    ['stock', 'New stock'],
+                  ])
+                    ChoiceChip(
+                      label: Text(k[1]),
+                      selected: msgKind == k[0],
+                      onSelected: (_) => setState(() => msgKind = k[0]),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              field(shopC, 'Shop name (optional)'),
+              field(
+                detailsC,
+                'Details',
+                hint: 'e.g. 10% off on all rice bags till Sunday',
+                lines: 2,
+              ),
+              const Text('Language',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              langChips(),
+            ],
+            if (mode == 'bill') ...[
+              field(shopC, 'Shop name (optional)'),
+              field(customerC, 'Customer name (optional)'),
+              field(
+                itemsC,
+                'Items (one per line: name quantity price)',
+                hint: 'Rice 2 60\nSugar 1 45\nOil 1 140',
+                lines: 4,
+              ),
+              const Text('GST', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final g in const [0.0, 5.0, 12.0, 18.0])
+                    ChoiceChip(
+                      label: Text(g == 0 ? 'No GST' : '${g.toStringAsFixed(0)}%'),
+                      selected: gst == g,
+                      onSelected: (_) => setState(() => gst = g),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: busy ? null : generate,
+              child: busy
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(label),
+            ),
+            if (busy)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text('Working... this can take up to 30 seconds.'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
