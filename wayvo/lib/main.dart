@@ -3748,13 +3748,7 @@ class _FeatureScreenState extends State<FeatureScreen> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _heading('Profile / Account', 'Manage your WAYVO account.'),
-      _card(
-        const ListTile(
-          leading: CircleAvatar(child: Icon(Icons.person)),
-          title: Text('Your Profile'),
-          subtitle: Text('Account information and profile settings'),
-        ),
-      ),
+      _card(const SizedBox(height: 240, child: AccountInfo())),
     ],
   );
 
