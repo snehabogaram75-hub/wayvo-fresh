@@ -1506,3 +1506,235 @@ class _ShopPageState extends State<ShopPage> {
     );
   }
 }
+
+
+class PlantPage extends StatefulWidget {
+  const PlantPage({super.key});
+
+  @override
+  State<PlantPage> createState() => _PlantPageState();
+}
+
+class _PlantPageState extends State<PlantPage> {
+  String mode = 'ask';
+  String lang = 'en';
+  String shift = 'Morning';
+  bool busy = false;
+  final questionC = TextEditingController();
+  final unitC = TextEditingController();
+  final dateC = TextEditingController();
+  final statusC = TextEditingController();
+  final issuesC = TextEditingController();
+  final pendingC = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    dateC.text = '${two(n.day)}-${two(n.month)}-${n.year}';
+  }
+
+  @override
+  void dispose() {
+    questionC.dispose();
+    unitC.dispose();
+    dateC.dispose();
+    statusC.dispose();
+    issuesC.dispose();
+    pendingC.dispose();
+    super.dispose();
+  }
+
+  void msg(String t) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+  }
+
+  Future<void> generate() async {
+    if (busy) return;
+    String path;
+    Map<String, dynamic> body;
+    if (mode == 'ask') {
+      if (questionC.text.trim().isEmpty) {
+        msg('Please type your question.');
+        return;
+      }
+      path = '/api/plant/ask';
+      body = {'question': questionC.text.trim(), 'lang': lang};
+    } else {
+      if (statusC.text.trim().isEmpty &&
+          issuesC.text.trim().isEmpty &&
+          pendingC.text.trim().isEmpty) {
+        msg('Please enter at least one detail.');
+        return;
+      }
+      path = '/api/plant/handover';
+      body = {
+        'unit': unitC.text.trim(),
+        'shift': shift,
+        'date': dateC.text.trim(),
+        'status': statusC.text.trim(),
+        'issues': issuesC.text.trim(),
+        'pending': pendingC.text.trim(),
+        'lang': lang,
+      };
+    }
+    setState(() => busy = true);
+    try {
+      final r = await dio.post(
+        path,
+        data: body,
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = r.data is String ? jsonDecode(r.data) : r.data;
+      if (!mounted) return;
+      if (data['success'] == true) {
+        Navigator.pop<int>(context, data['chat_id'] as int);
+      } else {
+        msg((data['message'] ?? 'Could not create it').toString());
+      }
+    } on DioException catch (e) {
+      msg(
+        ((e.response?.data is Map ? e.response?.data['message'] : null) ??
+                'Could not create it. Try again.')
+            .toString(),
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Widget field(TextEditingController c, String label,
+      {String? hint, int lines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: c,
+        minLines: lines,
+        maxLines: lines == 1 ? 1 : lines + 3,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Plant Copilot')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Ask documents'),
+                  selected: mode == 'ask',
+                  onSelected: (_) => setState(() => mode = 'ask'),
+                ),
+                ChoiceChip(
+                  label: const Text('Shift handover'),
+                  selected: mode == 'handover',
+                  onSelected: (_) => setState(() => mode = 'handover'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (mode == 'ask') ...[
+              const Text(
+                'Answers come only from the SOPs and manuals you uploaded in My Files, with the file name as source.',
+                style: TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              field(
+                questionC,
+                'Your question',
+                hint: 'e.g. What is the purge time before boiler light-up?',
+                lines: 3,
+              ),
+            ] else ...[
+              field(unitC, 'Unit', hint: 'e.g. Boiler 2'),
+              const Text('Shift', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final s in const ['Morning', 'Afternoon', 'Night'])
+                    ChoiceChip(
+                      label: Text(s),
+                      selected: shift == s,
+                      onSelected: (_) => setState(() => shift = s),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              field(dateC, 'Date'),
+              field(
+                statusC,
+                'Running status',
+                hint: 'e.g. Load 80%, both ID fans running, drum level normal',
+                lines: 2,
+              ),
+              field(
+                issuesC,
+                'Issues and alarms',
+                hint: 'e.g. APH inlet temp alarm at 2 AM, cleared',
+                lines: 2,
+              ),
+              field(
+                pendingC,
+                'Pending actions',
+                hint: 'e.g. Soot blowing due, pump 2 seal leak to be checked',
+                lines: 2,
+              ),
+            ],
+            const Text('Language',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('English'),
+                  selected: lang == 'en',
+                  onSelected: (_) => setState(() => lang = 'en'),
+                ),
+                ChoiceChip(
+                  label: const Text('Telugu'),
+                  selected: lang == 'te',
+                  onSelected: (_) => setState(() => lang = 'te'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: busy ? null : generate,
+              child: busy
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(mode == 'ask' ? 'Ask' : 'Make handover note'),
+            ),
+            if (busy)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text('Working... this can take up to 30 seconds.'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

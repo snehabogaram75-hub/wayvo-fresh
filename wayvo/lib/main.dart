@@ -665,6 +665,16 @@ class _WayvoHomeState extends State<WayvoHome>
     }
   }
 
+  Future<void> openPlant() async {
+    if (historyOpen) setState(() => historyOpen = false);
+    final chatId = await Navigator.of(context)
+        .push<int>(MaterialPageRoute(builder: (_) => const PlantPage()));
+    if (chatId != null && mounted) {
+      await loadChats();
+      await openChat(chatId);
+    }
+  }
+
   Future<void> openShop() async {
     if (historyOpen) setState(() => historyOpen = false);
     final chatId = await Navigator.of(context)
@@ -1596,6 +1606,11 @@ class _WayvoHomeState extends State<WayvoHome>
                     onTap: openShop,
                   ),
                   _sideItem(
+                    Icons.factory_outlined,
+                    'Plant Copilot',
+                    onTap: openPlant,
+                  ),
+                  _sideItem(
                     Icons.record_voice_over_outlined,
                     'Interview Coach',
                     onTap: startInterview,
@@ -1702,6 +1717,11 @@ class _WayvoHomeState extends State<WayvoHome>
         Icons.storefront_outlined,
         'Shop Helper',
         onTap: openShop,
+      ),
+      _sideItem(
+        Icons.factory_outlined,
+        'Plant Copilot',
+        onTap: openPlant,
       ),
       _sideItem(
         Icons.record_voice_over_outlined,
