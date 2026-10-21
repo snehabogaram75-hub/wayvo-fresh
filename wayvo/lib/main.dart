@@ -393,6 +393,7 @@ class _WayvoHomeState extends State<WayvoHome>
   final FlutterTts tts = FlutterTts();
   bool voiceMode = false;
   bool interviewMode = false;
+  bool elderMode = false;
   bool speaking = false;
   bool sttReady = false;
   bool voiceGotResult = false;
@@ -487,6 +488,7 @@ class _WayvoHomeState extends State<WayvoHome>
 
   Future<String?> sttLocale() async {
     final p = await SharedPreferences.getInstance();
+    if (elderMode) return 'te_IN';
     final v = p.getString('stt_locale');
     return (v == null || v.isEmpty) ? null : v;
   }
@@ -663,6 +665,20 @@ class _WayvoHomeState extends State<WayvoHome>
     if (ok && mounted) {
       setState(() => showLocked = true);
     }
+  }
+
+  Future<void> startElder() async {
+    if (sending) return;
+    if (historyOpen) setState(() => historyOpen = false);
+    startNewChat();
+    setState(() {
+      elderMode = true;
+      voiceMode = true;
+    });
+    voiceStatus.value = 'Thinking…';
+    voiceText.value = '';
+    messageController.text = 'నమస్కారం';
+    await sendMessage();
   }
 
   Future<void> openPlant() async {
@@ -975,6 +991,7 @@ class _WayvoHomeState extends State<WayvoHome>
         setState(() {
           currentChatId = chatId;
           interviewMode = false;
+          elderMode = false;
           messages.clear();
           for (final m in data['messages']) {
             messages.add({
@@ -1035,7 +1052,7 @@ class _WayvoHomeState extends State<WayvoHome>
           'style': prefs.getString('resp_style') ?? 'short',
           'message': message,
           'chat_id': currentChatId,
-          if (interviewMode) 'mode': 'interview',
+          if (interviewMode) 'mode': 'interview' else if (elderMode) 'mode': 'elder',
         },
         options: Options(
           contentType: Headers.jsonContentType,
@@ -1500,6 +1517,7 @@ class _WayvoHomeState extends State<WayvoHome>
 
   void startNewChat() {
     interviewMode = false;
+    elderMode = false;
     setState(() {
       messages.clear();
       currentChatId = null;
@@ -1609,6 +1627,11 @@ class _WayvoHomeState extends State<WayvoHome>
                     Icons.factory_outlined,
                     'Plant Copilot',
                     onTap: openPlant,
+                  ),
+                  _sideItem(
+                    Icons.elderly,
+                    'Easy Voice (Telugu)',
+                    onTap: startElder,
                   ),
                   _sideItem(
                     Icons.record_voice_over_outlined,
@@ -1722,6 +1745,11 @@ class _WayvoHomeState extends State<WayvoHome>
         Icons.factory_outlined,
         'Plant Copilot',
         onTap: openPlant,
+      ),
+      _sideItem(
+        Icons.elderly,
+        'Easy Voice (Telugu)',
+        onTap: startElder,
       ),
       _sideItem(
         Icons.record_voice_over_outlined,
