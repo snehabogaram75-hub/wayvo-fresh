@@ -78,7 +78,7 @@ RATE_WINDOW = 60
 
 @app.before_request
 def wayvo_rate_limit():
-    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper", "/generate", "/flashcards", "/explain", "/plan"))):
+    if request.method != "POST" or not (request.path in ("/api/chat", "/api/chat/stream") or request.path.endswith(("/quiz", "/helper", "/generate", "/flashcards", "/explain", "/plan")) or request.path.startswith("/api/shop/")):
         return None
     key = str(session.get("user_id") or request.remote_addr)
     now = _rl_time.time()
@@ -1008,6 +1008,229 @@ def study_plan():
         "Study plan: " + subjects,
         "Study plan | " + subjects + " | exam " + exam.isoformat() + " | " + str(hours) + " h/day",
         reply,
+    )
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
+
+
+@app.route("/api/shop/sales", methods=["POST"])
+def shop_sales():
+    import io
+    import pandas as pd
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    lang = "te" if d.get("lang") == "te" else "en"
+    try:
+        fid = int(d.get("file_id"))
+    except Exception:
+        return jsonify({"success": False, "message": "Please pick a sales file."}), 400
+    conn = get_db()
+    row = conn.execute(
+        "SELECT filename, data FROM user_files WHERE id = ? AND user_id = ?",
+        (fid, session["user_id"])
+    ).fetchone()
+    conn.close()
+    if not row or row["data"] is None:
+        return jsonify({"success": False, "message": "File not found"}), 404
+    name = (row["filename"] or "").lower()
+    raw = bytes(row["data"])
+    try:
+        if name.endswith(".csv"):
+            df = pd.read_csv(io.BytesIO(raw))
+        elif name.endswith((".xlsx", ".xlsm", ".xls")):
+            df = pd.read_excel(io.BytesIO(raw))
+        else:
+            return jsonify({"success": False, "message": "Please pick an Excel or CSV sales file."}), 400
+    except Exception as e:
+        print("SALES READ ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not read this file."}), 400
+    df = df.dropna(how="all").head(50000)
+    df.columns = [str(c) for c in df.columns]
+    cols = list(df.columns)
+    if df.empty or len(cols) < 2:
+        return jsonify({"success": False, "message": "This file has no usable sales table."}), 400
+    low = {c: c.lower() for c in cols}
+
+    def pick(words, numeric=None):
+        for c in cols:
+            if any(w in low[c] for w in words):
+                is_num = pd.api.types.is_numeric_dtype(df[c])
+                if numeric is True and not is_num:
+                    continue
+                if numeric is False and is_num:
+                    continue
+                return c
+        return None
+
+    item_c = pick(["item", "product", "name", "particular", "description", "goods"], False)
+    qty_c = pick(["qty", "quantity", "units", "sold", "pcs"], True)
+    amt_c = pick(["amount", "total", "sales", "revenue", "value", "price"], True)
+    date_c = pick(["date", "day"])
+    stock_c = pick(["stock", "inventory", "balance", "remaining", "available"], True)
+
+    lines = ["Rows: " + str(len(df)), "Columns: " + ", ".join(cols[:15])]
+    for c in cols:
+        if pd.api.types.is_numeric_dtype(df[c]) and len(lines) < 12:
+            sr = df[c].dropna()
+            if len(sr):
+                lines.append("%s: total %.2f, average %.2f, min %.2f, max %.2f" % (c, sr.sum(), sr.mean(), sr.min(), sr.max()))
+    val_c = amt_c or qty_c
+    if date_c:
+        try:
+            dt = pd.to_datetime(df[date_c], errors="coerce", dayfirst=True)
+            if dt.notna().sum() > 0:
+                lines.append("Date range: " + str(dt.min().date()) + " to " + str(dt.max().date()))
+                if val_c:
+                    last = dt.max()
+                    w1 = df.loc[dt > last - pd.Timedelta(days=7), val_c].sum()
+                    w0 = df.loc[(dt > last - pd.Timedelta(days=14)) & (dt <= last - pd.Timedelta(days=7)), val_c].sum()
+                    lines.append("%s in the last 7 days: %.2f; in the 7 days before that: %.2f" % (val_c, w1, w0))
+        except Exception as e:
+            print("SALES DATE ERROR:", repr(e))
+    if item_c and val_c:
+        try:
+            g = df.groupby(item_c)[val_c].sum().sort_values(ascending=False)
+            lines.append("Top items by " + val_c + ": " + "; ".join("%s (%.2f)" % (k, v) for k, v in g.head(5).items()))
+            if len(g) > 5:
+                lines.append("Slowest items by " + val_c + ": " + "; ".join("%s (%.2f)" % (k, v) for k, v in g.tail(3).items()))
+        except Exception as e:
+            print("SALES GROUP ERROR:", repr(e))
+    if item_c and stock_c:
+        try:
+            sdf = df.drop_duplicates(subset=[item_c], keep="last")[[item_c, stock_c]].dropna().sort_values(stock_c).head(5)
+            lines.append("Lowest stock: " + "; ".join("%s (%s)" % (r[item_c], r[stock_c]) for _, r in sdf.iterrows()))
+        except Exception as e:
+            print("SALES STOCK ERROR:", repr(e))
+    lang_rule = (
+        "Write in simple everyday Telugu in Telugu script, keeping item names and numbers as given."
+        if lang == "te" else "Write in simple English."
+    )
+    system = (
+        "You are WAYVO Shop Helper for a small shop owner. Use ONLY the computed numbers given; never invent numbers or items. "
+        "Give short lines: 1) overall sales, 2) best sellers, 3) slow items, 4) trend compared with the previous week if the numbers are given, "
+        "5) items with low stock to reorder if the numbers are given, 6) three simple practical suggestions. "
+        "If something is not in the numbers, skip it. " + lang_rule + " Plain text only, no markdown symbols like * or #."
+    )
+    try:
+        reply = _groq_text(system, "File: " + (row["filename"] or "") + "\n\n" + "\n".join(lines), 2500, 0.3)
+    except Exception as e:
+        print("SALES AI ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not summarize right now. Please try again."}), 500
+    if not reply:
+        return jsonify({"success": False, "message": "Could not summarize right now. Please try again."}), 500
+    chat_id = _save_gen_chat(
+        session["user_id"], "Sales: " + (row["filename"] or "file"),
+        "Sales summary: " + (row["filename"] or "file"), reply
+    )
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
+
+
+@app.route("/api/shop/message", methods=["POST"])
+def shop_message():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    kinds = {
+        "offer": ("Offer", "an offer or discount announcement"),
+        "reminder": ("Payment reminder", "a polite, friendly payment reminder (respectful, never rude or threatening)"),
+        "festival": ("Festival wishes", "a warm festival or greeting message to customers"),
+        "stock": ("New stock", "a new stock or product arrival announcement"),
+    }
+    kind = d.get("kind", "offer")
+    if kind not in kinds:
+        kind = "offer"
+    lang = "te" if d.get("lang") == "te" else "en"
+    shop = str(d.get("shop", "")).strip()[:60]
+    details = str(d.get("details", "")).strip()[:500]
+    if not details:
+        return jsonify({"success": False, "message": "Please enter the details."}), 400
+    label, what = kinds[kind]
+    lang_rule = (
+        "Write in simple everyday Telugu in Telugu script." if lang == "te" else "Write in simple English."
+    )
+    system = (
+        "You are WAYVO Shop Helper. Write " + what + " for customers of a small shop, ready to send on WhatsApp. "
+        "Write 3 different versions, numbered 1 to 3, each 2 to 4 short lines, with a few suitable emojis, the shop name, "
+        "and a clear call to action when it fits. Use ONLY the details given; never invent prices, dates or offers. "
+        + lang_rule + " Plain text only, no markdown symbols like * or #."
+    )
+    user = "Shop name: " + (shop or "not given") + "\nDetails: " + details
+    try:
+        reply = _groq_text(system, user, 2500, 0.6)
+    except Exception as e:
+        print("SHOP MESSAGE ERROR:", repr(e))
+        return jsonify({"success": False, "message": "Could not write it right now. Please try again."}), 500
+    if not reply:
+        return jsonify({"success": False, "message": "Could not write it right now. Please try again."}), 500
+    chat_id = _save_gen_chat(
+        session["user_id"], label + (": " + shop if shop else ""),
+        label + " | " + (shop or "shop") + " | " + details[:120], reply
+    )
+    return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
+
+
+@app.route("/api/shop/bill", methods=["POST"])
+def shop_bill():
+    import re as _re
+    import datetime as _dt
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    shop = str(d.get("shop", "")).strip()[:60]
+    customer = str(d.get("customer", "")).strip()[:60]
+    try:
+        gst = float(d.get("gst", 0) or 0)
+    except Exception:
+        gst = 0.0
+    gst = max(0.0, min(gst, 50.0))
+
+    def fmt(v):
+        return ("%.2f" % v).rstrip("0").rstrip(".")
+
+    rows = []
+    for line in str(d.get("items", "")).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        nums = _re.findall(r"\d+(?:\.\d+)?", line)
+        if not nums:
+            continue
+        name = _re.sub(r"\d+(?:\.\d+)?", " ", line)
+        name = _re.sub(r"[x*@=,:]+", " ", name)
+        name = " ".join(name.split()) or "Item"
+        if len(nums) == 1:
+            qty, price = 1.0, float(nums[0])
+        else:
+            qty, price = float(nums[-2]), float(nums[-1])
+        rows.append((name[:40], qty, price, qty * price))
+        if len(rows) >= 100:
+            break
+    if not rows:
+        return jsonify({"success": False, "message": "Please enter items like: Rice 2 60 (name, quantity, price)."}), 400
+    sub = sum(r[3] for r in rows)
+    tax = sub * gst / 100.0
+    total = sub + tax
+    now = _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=5, minutes=30)
+    out = ["BILL"]
+    if shop:
+        out.append("Shop: " + shop)
+    if customer:
+        out.append("Customer: " + customer)
+    out.append("Date: " + now.strftime("%d-%m-%Y"))
+    out.append("")
+    for i, r in enumerate(rows, 1):
+        out.append("%d. %s  %s x %s = %s" % (i, r[0], fmt(r[1]), fmt(r[2]), fmt(r[3])))
+    out.append("")
+    out.append("Subtotal: Rs. " + fmt(sub))
+    if gst > 0:
+        out.append("GST (" + fmt(gst) + "%): Rs. " + fmt(tax))
+    out.append("TOTAL: Rs. " + fmt(total))
+    out.append("")
+    out.append("Thank you! Visit again.")
+    reply = "\n".join(out)
+    chat_id = _save_gen_chat(
+        session["user_id"], "Bill: " + (customer or shop or "customer"),
+        "Bill for " + str(len(rows)) + " items", reply
     )
     return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
 
