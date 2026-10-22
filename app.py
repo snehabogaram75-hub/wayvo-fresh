@@ -2129,7 +2129,7 @@ def build_live_block(message):
 
 
 _DETAIL_RE = re.compile(
-    r"\b(?:detail|detailed|in detail|in depth|in-depth|elaborate|explain|"
+    r"\b(?:detail|detailed|in detail|in depth|in-depth|elaborate|"
     r"step by step|step-by-step|steps|full|complete|comprehensive|thorough|"
     r"essay|long answer|deep dive|tell me more|more about|vivaram|"
     r"vivarinchu|pedda ga|detail ga|poorthiga|inka cheppu|clear ga cheppu)\b",
@@ -2151,8 +2151,43 @@ _CODE_RE = re.compile(
 )
 
 
+_SIMPLE_RE = re.compile(
+    r"\b(?:simple|simply|easy|easily|eli5|eli10|layman|beginner|for kids?|like i'?m (?:5|10|a kid)|saralanga|sulabham ga|simple ga|easy ga|ardham ayyela|ardham ayye laaga|pillalaki)\b",
+    re.I,
+)
+_STRICT_DETAIL_RE = re.compile(
+    r"\b(?:in detail|detailed|detail ga|in depth|in-depth|elaborate|step by step|step-by-step|deep dive|vivaram|vivarinchu|poorthiga|pedda ga)\b",
+    re.I,
+)
+_EXPLAIN_RE = re.compile(r"\b(?:explain|how does|how do|why does|why do|difference between)\b", re.I)
+_CASUAL_RE = re.compile(
+    r"^\s*(?:hi+|hello+|hey+|hai|namaste|namaskaram|thanks?|thank you|thx|ok|okay|sare|bye|good (?:morning|night|evening|afternoon))\b",
+    re.I,
+)
+
+
 def response_style(message, pref="short"):
     """Return (style_rule_text, max_tokens)."""
+    if _CASUAL_RE.match(message) and len(message.split()) <= 3:
+        return (
+            "LENGTH: This is casual small talk. Reply with ONE short friendly line (it may end with the follow-up question), no lists, no headings.",
+            200,
+        )
+    if _SIMPLE_RE.search(message) and not _CODE_RE.search(message):
+        if _SHORT_RE.search(message):
+            return (
+                "STYLE: The user wants it simple AND short. Use very easy everyday words, no jargon, 1-2 short sentences.",
+                250,
+            )
+        if _STRICT_DETAIL_RE.search(message):
+            return (
+                "STYLE: The user wants a simple but fuller explanation. Use easy everyday words, short sentences, one small everyday example, and explain any technical word in plain language. Use short numbered steps if helpful.",
+                900,
+            )
+        return (
+            "STYLE: The user wants a simple explanation. Use very easy everyday words and short sentences, no jargon (if a technical word is needed, explain it in plain words), one small everyday example, 3-5 sentences total, no headings.",
+            600,
+        )
     if _SHORT_RE.search(message) and not _DETAIL_RE.search(message):
         return (
             "LENGTH: The user wants it very short. Reply in 1-2 sentences "
@@ -2181,6 +2216,11 @@ def response_style(message, pref="short"):
     if pref == "balanced":
         return (
             "LENGTH: Give a balanced answer of about 5-8 sentences, no padding.",
+            800,
+        )
+    if _EXPLAIN_RE.search(message):
+        return (
+            "LENGTH: Give a clear explanation of about 5-7 sentences, direct and focused, no padding. Use a short numbered list only if it really helps.",
             800,
         )
     return (
