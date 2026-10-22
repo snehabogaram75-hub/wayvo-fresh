@@ -2572,7 +2572,7 @@ def api_chat_stream():
         yield _json.dumps({"chat_id": chat_id}) + "\n"
         full = ""
         try:
-            stream = ask_ollama(message, history, style, stream_mode=True, mode=mode)
+            stream = ask_ollama(message, list(history) + ([{"role": "Note", "content": "(System note: the next user message was typed by speech recognition, so spelling may be wrong, especially Telugu or Tanglish words. Understand it phonetically and by meaning. Reply in the same language and script the user speaks. Keep it natural and brief for speaking aloud, no markdown symbols.)"}] if data.get("voice") else []), style, stream_mode=True, mode=mode)
             for chunk in stream:
                 if not chunk.choices:
                     continue
