@@ -2232,6 +2232,142 @@ def response_style(message, pref="short"):
     )
 
 
+_ITEMS_READY = False
+_ITEM_FEATURES = ("Diary", "Schedule / Interview", "Projects", "Codex", "Plugins")
+
+
+def _ensure_items_table(conn):
+    global _ITEMS_READY
+    if _ITEMS_READY:
+        return
+    conn.execute("""CREATE TABLE IF NOT EXISTS user_items (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        feature TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL DEFAULT '',
+        mood TEXT DEFAULT '',
+        scheduled TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS user_items_uf ON user_items (user_id, feature)")
+    conn.execute("ALTER TABLE user_items ENABLE ROW LEVEL SECURITY")
+    conn.commit()
+    _ITEMS_READY = True
+
+
+def _clean_item(d):
+    return (
+        str(d.get("title") or "").strip()[:200],
+        str(d.get("body") or "").strip()[:20000],
+        str(d.get("mood") or "")[:40],
+        str(d.get("scheduledDate") or d.get("scheduled") or "")[:60],
+    )
+
+
+def _parse_dt(v):
+    import datetime as _dt
+    try:
+        return _dt.datetime.fromisoformat(str(v).replace("Z", "+00:00")).replace(tzinfo=None)
+    except Exception:
+        return None
+
+
+def _items_out(r):
+    ts = r["created_at"]
+    return {
+        "id": r["id"],
+        "feature": r["feature"],
+        "title": r["title"],
+        "body": r["body"],
+        "mood": r["mood"] or "",
+        "scheduledDate": r["scheduled"] or "",
+        "date": ts.isoformat() if ts else "",
+    }
+
+
+_ITEM_INSERT = "INSERT INTO user_items (user_id, feature, title, body, mood, scheduled, created_at) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP)) RETURNING id"
+
+
+@app.route("/api/items", methods=["GET", "POST"])
+def api_items():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    uid = session["user_id"]
+    conn = get_db()
+    try:
+        _ensure_items_table(conn)
+        if request.method == "GET":
+            feature = (request.args.get("feature") or "").strip()
+            if feature not in _ITEM_FEATURES:
+                return jsonify({"success": False, "message": "Unknown feature."}), 400
+            rows = conn.execute(
+                "SELECT id, feature, title, body, mood, scheduled, created_at FROM user_items WHERE user_id = ? AND feature = ? ORDER BY created_at DESC, id DESC LIMIT 1000",
+                (uid, feature),
+            ).fetchall()
+            return jsonify({"success": True, "items": [_items_out(r) for r in rows]})
+        data = request.get_json() or {}
+        feature = str(data.get("feature") or "").strip()
+        if feature not in _ITEM_FEATURES:
+            return jsonify({"success": False, "message": "Unknown feature."}), 400
+        title, body, mood, sched = _clean_item(data)
+        if not title or not body:
+            return jsonify({"success": False, "message": "Please enter both title and details."}), 400
+        n = conn.execute("SELECT COUNT(*) AS c FROM user_items WHERE user_id = ?", (uid,)).fetchone()["c"]
+        if n >= 2000:
+            return jsonify({"success": False, "message": "Too many saved items."}), 400
+        row = conn.execute(_ITEM_INSERT, (uid, feature, title, body, mood, sched, _parse_dt(data.get("date")))).fetchone()
+        conn.commit()
+        return jsonify({"success": True, "id": row["id"]})
+    finally:
+        conn.close()
+
+
+@app.route("/api/items/import", methods=["POST"])
+def api_items_import():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    uid = session["user_id"]
+    data = request.get_json() or {}
+    feature = str(data.get("feature") or "").strip()
+    items = data.get("items")
+    if feature not in _ITEM_FEATURES or not isinstance(items, list):
+        return jsonify({"success": False, "message": "Bad request."}), 400
+    conn = get_db()
+    try:
+        _ensure_items_table(conn)
+        have = conn.execute("SELECT COUNT(*) AS c FROM user_items WHERE user_id = ? AND feature = ?", (uid, feature)).fetchone()["c"]
+        if have > 0:
+            return jsonify({"success": True, "imported": 0})
+        done = 0
+        for it in reversed(items[:500]):
+            if not isinstance(it, dict):
+                continue
+            title, body, mood, sched = _clean_item(it)
+            if not title or not body:
+                continue
+            conn.execute(_ITEM_INSERT, (uid, feature, title, body, mood, sched, _parse_dt(it.get("date"))))
+            done += 1
+        conn.commit()
+        return jsonify({"success": True, "imported": done})
+    finally:
+        conn.close()
+
+
+@app.route("/api/items/<int:item_id>", methods=["DELETE"])
+def api_items_delete(item_id):
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    conn = get_db()
+    try:
+        _ensure_items_table(conn)
+        conn.execute("DELETE FROM user_items WHERE id = ? AND user_id = ?", (item_id, session["user_id"]))
+        conn.commit()
+        return jsonify({"success": True})
+    finally:
+        conn.close()
+
+
 @app.route("/api/health")
 def api_health():
     try:
