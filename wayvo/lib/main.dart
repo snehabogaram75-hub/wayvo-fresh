@@ -514,6 +514,23 @@ class _WayvoHomeState extends State<WayvoHome>
     return sttReady;
   }
 
+  String voiceAccum = '';
+  int voiceSilenceTok = 0;
+
+  void voiceSchedule() {
+    final t = ++voiceSilenceTok;
+    Future.delayed(const Duration(milliseconds: 3500), () {
+      if (t != voiceSilenceTok) return;
+      if (!voiceMode || voiceGotResult || sending || speaking) return;
+      final all = (voiceAccum + ' ' + voiceLastWords).trim();
+      if (all.isNotEmpty) {
+        voiceAccum = '';
+        voiceLastWords = '';
+        submitVoice(all);
+      }
+    });
+  }
+
   void onSttStatus(String status) {
     if (!mounted) return;
     if (status == 'done' || status == 'notListening') {
@@ -524,10 +541,12 @@ class _WayvoHomeState extends State<WayvoHome>
         Future.delayed(const Duration(milliseconds: 500), () {
           if (!voiceMode || voiceGotResult || sending || speaking) return;
           if (voiceLastWords.trim().isNotEmpty) {
-            submitVoice(voiceLastWords);
-          } else {
-            startVoiceListen();
+            voiceAccum = (voiceAccum + ' ' + voiceLastWords).trim();
+            voiceLastWords = '';
+            voiceText.value = voiceAccum;
+            voiceSchedule();
           }
+          startVoiceListen();
         });
       }
     }
@@ -537,6 +556,9 @@ class _WayvoHomeState extends State<WayvoHome>
     final words = text.trim();
     if (words.isEmpty || voiceGotResult || sending) return;
     voiceGotResult = true;
+    voiceAccum = '';
+    voiceSilenceTok++;
+    speechToText.stop();
     messageController.text = words;
     voiceStatus.value = 'Thinking…';
     await sendMessage();
@@ -558,7 +580,7 @@ class _WayvoHomeState extends State<WayvoHome>
       voiceGotResult = false;
       voiceLastWords = '';
       voiceStatus.value = 'Listening…';
-      voiceText.value = '';
+      voiceText.value = voiceAccum;
       await speechToText.listen(
         localeId: await sttLocale(),
         listenOptions: stt.SpeechListenOptions(
@@ -569,10 +591,13 @@ class _WayvoHomeState extends State<WayvoHome>
           cancelOnError: false,
         ),
         onResult: (r) {
-          voiceText.value = r.recognizedWords;
+          voiceText.value = (voiceAccum + ' ' + r.recognizedWords).trim();
           voiceLastWords = r.recognizedWords;
+          if (r.recognizedWords.trim().isNotEmpty) voiceSilenceTok++;
           if (r.finalResult) {
-            submitVoice(r.recognizedWords);
+            voiceAccum = (voiceAccum + ' ' + r.recognizedWords).trim();
+            voiceLastWords = '';
+            voiceSchedule();
           }
         },
       );
@@ -585,6 +610,8 @@ class _WayvoHomeState extends State<WayvoHome>
     if (sending) return;
     FocusScope.of(context).unfocus();
     setState(() => voiceMode = true);
+    voiceAccum = '';
+    voiceSilenceTok++;
     voiceStatus.value = 'Listening…';
     voiceText.value = '';
     startVoiceListen();
