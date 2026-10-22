@@ -3250,13 +3250,83 @@ class _FeatureScreenState extends State<FeatureScreen> {
     _loadSaved();
   }
 
+  static const List<String> _syncFeatures = [
+    'Diary',
+    'Schedule / Interview',
+    'Projects',
+  ];
+
+  Future<List<Map<String, dynamic>>?> _fetchFeature(String feature) async {
+    try {
+      final r = await dio.get(
+        '/api/items',
+        queryParameters: {'feature': feature},
+      );
+      final d = r.data is String ? jsonDecode(r.data) : r.data;
+      if (d is Map && d['success'] == true) {
+        return (d['items'] as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _uploadPending(
+    String feature,
+    List<Map<String, dynamic>> list,
+  ) async {
+    for (final e in list.reversed) {
+      if (e['id'] != null) continue;
+      try {
+        final r = await dio.post(
+          '/api/items',
+          data: {
+            'feature': feature,
+            'title': e['title'],
+            'body': e['body'],
+            'mood': e['mood'] ?? '',
+            'scheduledDate': e['scheduledDate'] ?? '',
+            'date': e['date'],
+          },
+        );
+        final d = r.data is String ? jsonDecode(r.data) : r.data;
+        if (d is Map && d['success'] == true) e['id'] = d['id'];
+      } catch (_) {}
+    }
+  }
+
   Future<void> _loadSaved() async {
     final prefs = await SharedPreferences.getInstance();
+    var local = (jsonDecode(
+      prefs.getString('wayvo_feature_$title') ?? '[]',
+    ) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    if (_syncFeatures.contains(title)) {
+      await _uploadPending(title, local);
+      final remote = await _fetchFeature(title);
+      if (remote != null) {
+        local = remote;
+      }
+      await prefs.setString('wayvo_feature_$title', jsonEncode(local));
+    } else if (title == 'Library') {
+      final all = <Map<String, dynamic>>[];
+      for (final f in _syncFeatures) {
+        final items = await _fetchFeature(f);
+        if (items == null) continue;
+        for (final it in items) {
+          all.add({...it, 'title': '[$f] ${it['title']}'});
+        }
+      }
+      all.sort(
+        (a, b) => (b['date'] ?? '').toString().compareTo(
+          (a['date'] ?? '').toString(),
+        ),
+      );
+      local = all;
+    }
     if (!mounted) return;
     setState(() {
-      _entries = (jsonDecode(
-        prefs.getString('wayvo_feature_$title') ?? '[]',
-      ) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      _entries = local;
       _mood = prefs.getString('wayvo_diary_mood') ?? '😊 Happy';
       _language = prefs.getString('wayvo_code_language') ?? 'Python';
       _loading = false;
@@ -3265,6 +3335,9 @@ class _FeatureScreenState extends State<FeatureScreen> {
 
   Future<void> _saveEntries() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_syncFeatures.contains(title)) {
+      await _uploadPending(title, _entries);
+    }
     await prefs.setString('wayvo_feature_$title', jsonEncode(_entries));
   }
 
