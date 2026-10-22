@@ -2288,6 +2288,10 @@ def ask_ollama(message, history, pref="short", stream_mode=False, mode=""):
         files_block = ""
     length_rule, max_toks = response_style(message, pref)
 
+    lang_note = ""
+    for _n in tanglish_note(message):
+        lang_note = "LANGUAGE RULE (most important, follow it first): " + _n["content"] + "\n\n"
+
     prompt = f"""
 You are WAYVO, a helpful personal AI assistant.
 
@@ -2322,7 +2326,7 @@ IMPORTANT RULES:
 Conversation history:
 {conversation}
 
-Current user question:
+{lang_note}Current user question:
 {message}
 
 WAYVO:
