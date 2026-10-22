@@ -2077,6 +2077,9 @@ _LIVE_RE = re.compile(
 _YEAR_RE = re.compile(r"\b20(?:2[4-9])\b")
 
 
+_NOSEARCH_RE = re.compile(r"\b(?:study plan|study schedule|how to study|worksheet|test paper|lesson plan|homework|revision|quiz|flashcards?|timetable|time table|exam undi|exam ki|exams undi|prepare|preparation)\b", re.I)
+
+
 def needs_live_info(message):
     """Search only for current information or explicit web-search requests."""
     if not message or not message.strip():
@@ -2089,7 +2092,11 @@ def needs_live_info(message):
         text,
         re.I,
     )
-    return bool(_LIVE_RE.search(text) or _YEAR_RE.search(text) or explicit_search)
+    if explicit_search:
+        return True
+    if _NOSEARCH_RE.search(text):
+        return False
+    return bool(_LIVE_RE.search(text) or _YEAR_RE.search(text))
 
 
 def build_live_block(message):
@@ -2526,6 +2533,16 @@ def api_chat():
 
 
 
+import re as _tre
+_TANGLISH_RE = _tre.compile(r"\b(thinn\w*|tinn\w*|baagun\w*|bagun\w*|em\s*ch\w*|ela\s*un\w*|ela\s*vun\w*|chepp\w*|nuvvu|nuv|meeru|naaku|naku|nenu|ippudu|ippud|repu|ninna|ledu|undi|unnav\w*|unnaru|kavali|kaavali|ante|kani|ayindi|ayyindi|chesava|chesanu|chestunna\w*|ayya|enti|emiti|ekkada|eppudu|enduku|chala|sare|avunu)\b", _tre.I)
+
+def tanglish_note(message):
+    if _tre.search(r"[\u0C00-\u0C7F]", message or ""):
+        return []
+    if _TANGLISH_RE.search(message or ""):
+        return [{"role": "Note", "content": "(System note: the user is writing Tanglish, which is Telugu in English letters, with possibly unusual spelling. Understand the Telugu meaning carefully: repu means tomorrow, ninna means yesterday, ippudu means now, tinnava or thinnava means did you eat, bagunnava means how are you, cheppu means tell. Reply ONLY in casual Tanglish using English letters only: do NOT use Telugu script, do NOT write plain English sentences, and never mix scripts. Do not add Sources or links unless the user asked for current news. Answer the real meaning correctly, for example: Tinnanu, nuvvu tinnava?)"}]
+    return []
+
 @app.route("/api/chat/stream", methods=["POST"])
 def api_chat_stream():
     import json as _json
@@ -2572,7 +2589,7 @@ def api_chat_stream():
         yield _json.dumps({"chat_id": chat_id}) + "\n"
         full = ""
         try:
-            stream = ask_ollama(message, list(history) + ([{"role": "Note", "content": "(System note: the next user message was typed by speech recognition, so spelling may be wrong, especially Telugu or Tanglish words. Understand it phonetically and by meaning. Reply in the same language and script the user speaks. Keep it natural and brief for speaking aloud, no markdown symbols.)"}] if data.get("voice") else []), style, stream_mode=True, mode=mode)
+            stream = ask_ollama(message, list(history) + tanglish_note(message) + ([{"role": "Note", "content": "(System note: the next user message was typed by speech recognition, so spelling may be wrong, especially Telugu or Tanglish words. Understand it phonetically and by meaning. Reply in the same language and script the user speaks. Keep it natural and brief for speaking aloud, no markdown symbols.)"}] if data.get("voice") else []), style, stream_mode=True, mode=mode)
             for chunk in stream:
                 if not chunk.choices:
                     continue
