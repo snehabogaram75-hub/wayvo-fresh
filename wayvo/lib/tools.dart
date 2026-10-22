@@ -413,6 +413,8 @@ class VoiceSettings extends StatefulWidget {
 class _VoiceSettingsState extends State<VoiceSettings> {
   double rate = 0.5;
   String micLang = '';
+  String gender = 'default';
+  double pitch = 1.0;
 
   @override
   void initState() {
@@ -422,6 +424,8 @@ class _VoiceSettingsState extends State<VoiceSettings> {
         setState(() {
           rate = p.getDouble('tts_rate') ?? 0.5;
           micLang = p.getString('stt_locale') ?? '';
+          gender = p.getString('tts_gender') ?? 'default';
+          pitch = p.getDouble('tts_pitch') ?? 1.0;
         });
       }
     });
@@ -446,6 +450,46 @@ class _VoiceSettingsState extends State<VoiceSettings> {
         ),
         const Text(
           'Slower on the left, faster on the right. Applies the next time you open the app.',
+          style: TextStyle(color: Colors.black54),
+        ),
+        const SizedBox(height: 24),
+        const Text('Voice style', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final g in const [
+              ['default', 'Default'],
+              ['female', 'Female'],
+              ['male', 'Male'],
+            ])
+              ChoiceChip(
+                label: Text(g[1]),
+                selected: gender == g[0],
+                onSelected: (_) async {
+                  setState(() => gender = g[0]);
+                  final p = await SharedPreferences.getInstance();
+                  await p.setString('tts_gender', g[0]);
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Text('Voice pitch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Slider(
+          value: pitch,
+          min: 0.7,
+          max: 1.4,
+          divisions: 7,
+          label: pitch.toStringAsFixed(1),
+          onChanged: (v) => setState(() => pitch = v),
+          onChangeEnd: (v) async {
+            final p = await SharedPreferences.getInstance();
+            await p.setDouble('tts_pitch', v);
+          },
+        ),
+        const Text(
+          'Lower is deeper, higher is thinner. Female/Male picks a matching voice from your phone if it has one. Applies from the next reply.',
           style: TextStyle(color: Colors.black54),
         ),
         const SizedBox(height: 24),

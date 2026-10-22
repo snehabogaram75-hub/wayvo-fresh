@@ -473,6 +473,38 @@ class _WayvoHomeState extends State<WayvoHome>
         await tts.setLanguage(inOk == true ? 'en-IN' : 'en-US');
       }
     } catch (_) {}
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final g = sp.getString('tts_gender') ?? 'default';
+      var pitch = sp.getDouble('tts_pitch') ?? 1.0;
+      if (g != 'default') {
+        final lang = RegExp(r'[\u0C00-\u0C7F]').hasMatch(text) ? 'te' : 'en';
+        const fem = ['female', 'woman', 'heera', 'zira', 'hazel', 'susan', 'shruti', 'kalpana', 'neerja', 'swara', 'aria', 'jenny', 'samantha', 'karen', 'tessa', 'veena', 'lekha', 'priya'];
+        const mal = ['male', 'ravi', 'hemant', 'prabhat', 'mohan', 'david', 'mark', 'james', 'rishi', 'daniel', 'guy', 'ryan'];
+        final raw = await tts.getVoices;
+        Map? pick;
+        if (raw is List) {
+          for (final v in raw) {
+            if (v is! Map) continue;
+            final loc = (v['locale'] ?? '').toString().toLowerCase().replaceAll('_', '-');
+            final nm = (v['name'] ?? '').toString().toLowerCase();
+            if (!loc.startsWith(lang)) continue;
+            final isFem = fem.any((k) => nm.contains(k));
+            final isMal = !isFem && mal.any((k) => nm.contains(k));
+            if ((g == 'female' && isFem) || (g == 'male' && isMal)) {
+              pick = v;
+              break;
+            }
+          }
+        }
+        if (pick != null) {
+          await tts.setVoice({'name': pick['name'].toString(), 'locale': pick['locale'].toString()});
+        } else {
+          pitch = g == 'female' ? pitch + 0.25 : pitch - 0.2;
+        }
+      }
+      await tts.setPitch(pitch.clamp(0.5, 2.0).toDouble());
+    } catch (_) {}
     final clean = text
         .replaceAll(RegExp(r'[*#`_>]'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
