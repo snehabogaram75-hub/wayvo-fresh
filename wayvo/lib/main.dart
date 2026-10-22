@@ -3808,6 +3808,94 @@ class _FeatureScreenState extends State<FeatureScreen> {
     ],
   );
 
+  Future<void> _openItem(Map<String, dynamic> entry) async {
+    final t = entry['title']?.toString() ?? 'Saved item';
+    final b = entry['body']?.toString() ?? '';
+    final d = entry['date']?.toString() ?? '';
+    final mood = entry['mood']?.toString() ?? '';
+    final id = entry['id'];
+    final shown = [
+      if (mood.isNotEmpty) mood,
+      if (d.isNotEmpty) d.split('T').first,
+      '',
+      b,
+    ].join('\n');
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t),
+        content: SingleChildScrollView(child: SelectableText(shown)),
+        actions: [
+          if (id != null)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'delete'),
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'copy'),
+            child: const Text('Copy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: '$t\n$b'));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Copied to clipboard.')),
+      );
+    } else if (action == 'delete') {
+      final sure = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete this entry?'),
+          content: const Text('This removes it from your account on every device.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+      if (sure != true) return;
+      try {
+        await dio.delete('/api/items/$id');
+        if (!mounted) return;
+        setState(() => _entries.removeWhere((e) => e['id'] == id));
+        final prefs = await SharedPreferences.getInstance();
+        for (final f in _syncFeatures) {
+          final key = 'wayvo_feature_$f';
+          final raw = prefs.getString(key);
+          if (raw == null) continue;
+          final list = (jsonDecode(raw) as List)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .where((e) => e['id'] != id)
+              .toList();
+          await prefs.setString(key, jsonEncode(list));
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Deleted.')),
+        );
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete. Check your connection.')),
+        );
+      }
+    }
+  }
+
   Widget _libraryWorkspace() => ListView(
     children: [
       _heading('Library', 'Your saved chats, notes, projects and content.'),
@@ -3826,6 +3914,7 @@ class _FeatureScreenState extends State<FeatureScreen> {
               final date = entry['date']?.toString() ?? '';
               return ListTile(
                 leading: const Icon(Icons.description_outlined),
+                onTap: () => _openItem(entry),
                 title: Text(title),
                 subtitle: Text(
                   [body, date].where((v) => v.isNotEmpty).join('\\n'),
