@@ -3820,26 +3820,40 @@ class _FeatureScreenState extends State<FeatureScreen> {
       '',
       b,
     ].join('\n');
-    final action = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(t),
-        content: SingleChildScrollView(child: SelectableText(shown)),
-        actions: [
-          if (id != null)
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'delete'),
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+    final action = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (ctx) => Scaffold(
+          backgroundColor: const Color(0xFFF8F7F2),
+          appBar: AppBar(
+            title: Text(t),
+            backgroundColor: const Color(0xFFF8F7F2),
+            foregroundColor: Colors.black87,
+            elevation: 0,
+            actions: [
+              IconButton(
+                tooltip: 'Copy',
+                icon: const Icon(Icons.copy),
+                onPressed: () => Navigator.pop(ctx, 'copy'),
+              ),
+              if (id != null)
+                IconButton(
+                  tooltip: 'Delete',
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  onPressed: () => Navigator.pop(ctx, 'delete'),
+                ),
+            ],
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: SizedBox(
+              width: double.infinity,
+              child: SelectableText(
+                shown,
+                style: const TextStyle(fontSize: 17, height: 1.5),
+              ),
             ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'copy'),
-            child: const Text('Copy'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
+        ),
       ),
     );
     if (!mounted) return;
