@@ -405,6 +405,7 @@ class _WayvoHomeState extends State<WayvoHome>
   bool voiceStarting = false;
   final ValueNotifier<String> voiceStatus = ValueNotifier<String>('Listening…');
   final ValueNotifier<String> voiceText = ValueNotifier<String>('');
+  final ValueNotifier<String> voiceLang = ValueNotifier<String>('');
 
   final List<Map<String, String>> messages = [];
 
@@ -489,6 +490,7 @@ class _WayvoHomeState extends State<WayvoHome>
   Future<String?> sttLocale() async {
     final p = await SharedPreferences.getInstance();
     if (elderMode) return 'te_IN';
+    if (voiceMode && voiceLang.value.isNotEmpty) return voiceLang.value;
     final v = p.getString('stt_locale');
     return (v == null || v.isEmpty) ? null : v;
   }
@@ -512,6 +514,21 @@ class _WayvoHomeState extends State<WayvoHome>
       },
     );
     return sttReady;
+  }
+
+  Future<void> setVoiceLang(String code) async {
+    voiceLang.value = code;
+    try {
+      final pp = await SharedPreferences.getInstance();
+      await pp.setString('stt_locale', code);
+    } catch (_) {}
+    voiceAccum = '';
+    voiceLastWords = '';
+    voiceText.value = '';
+    voiceSilenceTok++;
+    await speechToText.stop();
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (voiceMode && !sending && !speaking) startVoiceListen();
   }
 
   String voiceAccum = '';
@@ -609,6 +626,13 @@ class _WayvoHomeState extends State<WayvoHome>
   Future<void> openVoiceMode() async {
     if (sending) return;
     FocusScope.of(context).unfocus();
+    try {
+      final pp = await SharedPreferences.getInstance();
+      final sv = pp.getString('stt_locale');
+      voiceLang.value = elderMode
+          ? 'te_IN'
+          : ((sv == null || sv.isEmpty) ? 'en_IN' : sv);
+    } catch (_) {}
     setState(() => voiceMode = true);
     voiceAccum = '';
     voiceSilenceTok++;
@@ -1083,6 +1107,7 @@ class _WayvoHomeState extends State<WayvoHome>
           'message': message,
           'chat_id': currentChatId,
           if (interviewMode) 'mode': 'interview' else if (elderMode) 'mode': 'elder',
+          if (voiceMode) 'voice': true,
         },
         options: Options(
           contentType: Headers.jsonContentType,
@@ -2954,6 +2979,26 @@ class _WayvoHomeState extends State<WayvoHome>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ValueListenableBuilder<String>(
+              valueListenable: voiceLang,
+              builder: (context, lang, _) => Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text('తెలుగు'),
+                    selected: lang.startsWith('te'),
+                    onSelected: (_) => setVoiceLang('te_IN'),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('English'),
+                    selected: lang.startsWith('en'),
+                    onSelected: (_) => setVoiceLang('en_IN'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             ValueListenableBuilder<String>(
               valueListenable: voiceStatus,
               builder: (context, status, _) => Column(
