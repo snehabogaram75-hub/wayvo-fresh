@@ -562,8 +562,11 @@ class _WayvoHomeState extends State<WayvoHome>
       await speechToText.listen(
         localeId: await sttLocale(),
         listenOptions: stt.SpeechListenOptions(
-          pauseFor: const Duration(seconds: 3),
-          listenFor: const Duration(seconds: 60),
+          pauseFor: const Duration(seconds: 6),
+          listenFor: const Duration(seconds: 180),
+          listenMode: stt.ListenMode.dictation,
+          partialResults: true,
+          cancelOnError: false,
         ),
         onResult: (r) {
           voiceText.value = r.recognizedWords;
@@ -1195,7 +1198,11 @@ class _WayvoHomeState extends State<WayvoHome>
     await speechToText.listen(
       localeId: await sttLocale(),
       listenOptions: stt.SpeechListenOptions(
-        pauseFor: const Duration(seconds: 3),
+        pauseFor: const Duration(seconds: 8),
+        listenFor: const Duration(seconds: 180),
+        listenMode: stt.ListenMode.dictation,
+        partialResults: true,
+        cancelOnError: false,
       ),
       onResult: (result) {
         if (!mounted) return;
