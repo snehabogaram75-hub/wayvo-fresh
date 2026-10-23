@@ -1815,7 +1815,7 @@ def tools_image():
         return jsonify({"success": False, "message": "Image limit reached (15 per hour). Try again later."}), 429
     r = None
     _errs = []
-    _pk = os.environ.get("POLLINATIONS_KEY", "")
+    _pk = os.environ.get("POLLINATIONS_KEY", "").strip()
     _q = urllib.parse.quote(prompt, safe="")
     for _base, _tmo in (("https://gen.pollinations.ai/image/", 14), ("https://image.pollinations.ai/prompt/", 10)):
         try:
@@ -1836,7 +1836,7 @@ def tools_image():
         except Exception as e:
             print("IMAGE TOOL ERROR:", _base, repr(e), flush=True); _errs.append(_base.split("//")[1].split(".")[0] + ": " + repr(e)[:120])
     if r is None:
-        return jsonify({"success": False, "message": "Image service is busy or not reachable. Try again in a minute. [debug: " + " | ".join(_errs)[:300] + "]"}), 502
+        return jsonify({"success": False, "message": "Image service is busy or not reachable. Try again in a minute. [debug: " + ("key=" + (str(len(_pk)) if _pk else "MISSING") + " | " + " | ".join(_errs))[:360] + "]"}), 502
     try:
         from PIL import Image, ImageDraw, ImageFont
         import io as _io
