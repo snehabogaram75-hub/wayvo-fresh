@@ -396,6 +396,39 @@ class _ImageWorkspaceState extends State<ImageWorkspace> {
     }
   }
 
+  Future<void> _copyLink() async {
+    if (image == null) return;
+    try {
+      final r = await dio.post(
+        '/api/images/share',
+        data: {'data_b64': base64Encode(image!)},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      final d = r.data is String ? jsonDecode(r.data) : r.data;
+      if (d['success'] == true) {
+        await Clipboard.setData(ClipboardData(text: d['url'].toString()));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Link copied. Anyone with this link can view the image.')),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text((d['message'] ?? 'Could not create the link').toString())),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_errText(e, 'Could not create the link. Try again.'))),
+      );
+    }
+  }
+
   void _openViewer() {
     if (image == null) return;
     Navigator.push(
@@ -494,6 +527,11 @@ class _ImageWorkspaceState extends State<ImageWorkspace> {
                     onPressed: _share,
                     icon: const Icon(Icons.share),
                     label: const Text('Share'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _copyLink,
+                    icon: const Icon(Icons.link),
+                    label: const Text('Link'),
                   ),
                 ],
               ),
