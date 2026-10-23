@@ -1824,7 +1824,7 @@ def tools_image():
                 _h["Authorization"] = "Bearer " + _pk
             _r = requests.get(
                 _base + _q,
-                params=({} if ("gen." in _base and not _pk) else {"width": 1024, "height": 1024, "model": "flux", "nologo": "true", "seed": random.randint(1, 999999)}),
+                params=({} if ("gen." in _base and not _pk) else {"width": 768, "height": 768, "model": "flux", "nologo": "true", "seed": random.randint(1, 999999)}),
                 headers=_h,
                 timeout=_tmo,
             )
