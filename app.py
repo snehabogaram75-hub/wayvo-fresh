@@ -1823,7 +1823,7 @@ def tools_image():
                 _h["Authorization"] = "Bearer " + _pk
             _r = requests.get(
                 _base + _q,
-                params={"width": 1024, "height": 1024, "model": "flux", "nologo": "true", "seed": random.randint(1, 999999)},
+                params=({} if ("gen." in _base and not _pk) else {"width": 1024, "height": 1024, "model": "flux", "nologo": "true", "seed": random.randint(1, 999999)}),
                 headers=_h,
                 timeout=_tmo,
             )
@@ -1836,6 +1836,27 @@ def tools_image():
             print("IMAGE TOOL ERROR:", _base, repr(e))
     if r is None:
         return jsonify({"success": False, "message": "Image service is busy or not reachable. Try again in a minute."}), 502
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import io as _io
+        _im = Image.open(_io.BytesIO(r.content)).convert("RGB")
+        _w, _h2 = _im.size
+        try:
+            _f = ImageFont.load_default(size=max(16, _w // 38))
+        except TypeError:
+            _f = ImageFont.load_default()
+        _d = ImageDraw.Draw(_im)
+        _t = "wayvo.sb"
+        _b = _d.textbbox((0, 0), _t, font=_f)
+        _x, _y = _w - (_b[2] - _b[0]) - 14, _h2 - (_b[3] - _b[1]) - 12
+        _d.text((_x + 1, _y + 1), _t, font=_f, fill=(0, 0, 0))
+        _d.text((_x, _y), _t, font=_f, fill=(255, 255, 255))
+        _buf = _io.BytesIO()
+        _im.save(_buf, "JPEG", quality=92)
+        r._content = _buf.getvalue()
+        r.headers["Content-Type"] = "image/jpeg"
+    except Exception as e:
+        print("IMAGE STAMP ERROR:", repr(e))
     ctype = r.headers.get("Content-Type", "")
     if r.status_code != 200 or not ctype.startswith("image/") or len(r.content) < 1000:
         return jsonify({"success": False, "message": "Image service is busy. Try again in a minute."}), 502
