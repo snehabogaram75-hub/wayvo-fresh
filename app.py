@@ -2755,7 +2755,9 @@ _TANGLISH_RE = _tre.compile(r"\b(thinn\w*|tinn\w*|baagun\w*|bagun\w*|em\s*ch\w*|
 
 def tanglish_note(message):
     if _tre.search(r"[\u0C00-\u0C7F]", message or ""):
-        return []
+        if _tre.search(r"(?i)telugu\s*(script|aksharalu|font)|తెలుగు\s*(లిపి|అక్షర|ఫాంట్)|తెలుగులో\s*(రాయి|రాసి)", message or ""):
+            return []
+        return [{"role": "Note", "content": "(System note: the user wrote in Telugu script, usually by voice typing, but they want chat replies in Tanglish, which is Telugu written in English letters, like normal WhatsApp chatting. Understand the Telugu meaning carefully. Reply ONLY in casual Tanglish using English letters: do NOT use Telugu script and do NOT write plain English sentences, and never mix scripts. Example: Nenu bagunnanu, nuvvu tinnava? Use Telugu script only if the user clearly asks for Telugu script.)"}]
     if _TANGLISH_RE.search(message or ""):
         return [{"role": "Note", "content": "(System note: the user is writing Tanglish, which is Telugu in English letters, with possibly unusual spelling. Understand the Telugu meaning carefully: repu means tomorrow, ninna means yesterday, ippudu means now, tinnava or thinnava means did you eat, bagunnava means how are you, cheppu means tell. Reply ONLY in casual Tanglish using English letters only: do NOT use Telugu script, do NOT write plain English sentences, and never mix scripts. Do not add Sources or links unless the user asked for current news. Answer the real meaning correctly, for example: Tinnanu, nuvvu tinnava?)"}]
     return []
@@ -2806,7 +2808,7 @@ def api_chat_stream():
         yield _json.dumps({"chat_id": chat_id}) + "\n"
         full = ""
         try:
-            stream = ask_ollama(message, list(history) + tanglish_note(message) + ([{"role": "Note", "content": "(System note: the next user message was typed by speech recognition, so spelling may be wrong, especially Telugu or Tanglish words. Understand it phonetically and by meaning. Reply in the same language and script the user speaks. Keep it natural and brief for speaking aloud, no markdown symbols.)"}] if data.get("voice") else []), style, stream_mode=True, mode=mode)
+            stream = ask_ollama(message, list(history) + (tanglish_note(message) if not mode else []) + ([{"role": "Note", "content": "(System note: the next user message was typed by speech recognition, so spelling may be wrong, especially Telugu or Tanglish words. Understand it phonetically and by meaning. Reply in the same language and script the user speaks. Keep it natural and brief for speaking aloud, no markdown symbols.)"}] if data.get("voice") else []), style, stream_mode=True, mode=mode)
             for chunk in stream:
                 if not chunk.choices:
                     continue
