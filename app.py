@@ -2431,6 +2431,78 @@ def api_items_delete(item_id):
         conn.close()
 
 
+_SHIMG_READY = False
+
+
+def _ensure_shared_images(conn):
+    global _SHIMG_READY
+    if _SHIMG_READY:
+        return
+    conn.execute("""CREATE TABLE IF NOT EXISTS shared_images (
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        mime TEXT NOT NULL DEFAULT 'image/jpeg',
+        data BYTEA NOT NULL,
+        revoked BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.execute("ALTER TABLE shared_images ENABLE ROW LEVEL SECURITY")
+    conn.commit()
+    _SHIMG_READY = True
+
+
+@app.route("/api/images/share", methods=["POST"])
+def api_images_share():
+    import secrets as _sec
+    import base64 as _b64
+    import psycopg2 as _pg
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please login first."}), 401
+    d = request.get_json() or {}
+    try:
+        raw = _b64.b64decode(str(d.get("data_b64") or ""), validate=False)
+    except Exception:
+        return jsonify({"success": False, "message": "Bad image data."}), 400
+    if len(raw) < 1000 or len(raw) > 4 * 1024 * 1024:
+        return jsonify({"success": False, "message": "Image is empty or too large."}), 400
+    if raw[:2] == b"\xff\xd8":
+        mime = "image/jpeg"
+    elif raw[:4] == b"\x89PNG":
+        mime = "image/png"
+    else:
+        return jsonify({"success": False, "message": "Only JPEG or PNG images can be shared."}), 400
+    uid = session["user_id"]
+    conn = get_db()
+    try:
+        _ensure_shared_images(conn)
+        n = conn.execute("SELECT COUNT(*) AS c FROM shared_images WHERE user_id = ? AND revoked = FALSE", (uid,)).fetchone()["c"]
+        if n >= 100:
+            return jsonify({"success": False, "message": "Too many shared images."}), 400
+        token = _sec.token_urlsafe(16)
+        conn.execute(
+            "INSERT INTO shared_images (token, user_id, mime, data) VALUES (?, ?, ?, ?)",
+            (token, uid, mime, _pg.Binary(raw)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"success": True, "url": "https://" + request.host + "/i/" + token})
+
+
+@app.route("/i/<token>")
+def public_shared_image(token):
+    from flask import Response
+    conn = get_db()
+    try:
+        _ensure_shared_images(conn)
+        row = conn.execute("SELECT mime, data FROM shared_images WHERE token = ? AND revoked = FALSE", (token[:64],)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return "Not found", 404
+    return Response(bytes(row["data"]), mimetype=row["mime"], headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.route("/api/health")
 def api_health():
     try:
