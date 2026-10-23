@@ -2025,17 +2025,42 @@ def chat():
     return render_template("chat.html")
 
 
+_SEARCH_EXCLUDE = ["facebook.com", "instagram.com", "pinterest.com", "tiktok.com", "quora.com"]
+_SEARCH_FILLER = {"cheppu", "chey", "cheyyi", "chepu", "ra", "bro", "naaku", "naku", "enti", "ela", "kavali", "kaavali", "ivvu", "ivvandi", "chupinchu", "gurinchi", "goorchi", "teliyali", "telusuko", "ee", "em", "ento", "ani", "kosam", "cheppandi", "kada", "unda", "undi"}
+_SEARCH_MAP = {"eroju": "today", "eeroju": "today", "ippudu": "now", "repu": "tomorrow", "ninna": "yesterday"}
+
+
+def _clean_search_query(q):
+    q0 = (q or "").strip()
+    if re.search(r"[\u0c00-\u0c7f]", q0) or not _TANGLISH_RE.search(q0):
+        return q0
+    toks = re.findall(r"[A-Za-z0-9\-\+\.]+", q0.lower().replace("ee roju", "eroju"))
+    out = []
+    for t in toks:
+        if t in _SEARCH_FILLER:
+            continue
+        t = _SEARCH_MAP.get(t, t)
+        if t not in out:
+            out.append(t)
+    if "news" in out and not any(w in out for w in ("today", "now", "yesterday", "tomorrow")):
+        out.append("today")
+    cleaned = " ".join(out).strip()
+    return cleaned if len(cleaned) >= 3 else q0
+
+
 def web_search(query):
     key = os.environ.get("TAVILY_API_KEY")
     if not key:
         return ""
     client = TavilyClient(api_key=key)
+    query = _clean_search_query(query)
     is_news = bool(re.search(r"\b(news|headlines|breaking)\b", query, re.I))
     options = {
         "query": query,
         "search_depth": "advanced" if is_news else "basic",
         "max_results": 5 if is_news else 3,
         "include_answer": False,
+        "exclude_domains": _SEARCH_EXCLUDE,
     }
     if is_news:
         options["topic"] = "news"
@@ -2046,7 +2071,11 @@ def web_search(query):
         "topic": options.get("topic", "general"),
     })
     try:
-        results = client.search(**options)
+        try:
+            results = client.search(**options)
+        except TypeError:
+            options.pop("exclude_domains", None)
+            results = client.search(**options)
         items = results.get("results", [])
         print("TAVILY RESULT COUNT:", len(items))
         lines = []
@@ -2123,7 +2152,7 @@ def build_live_block(message):
         "Start with the line Today's points: then give 3 to 6 short lines, each starting with '- ', saying what is happening based on the search results. Do NOT put Confirmed on each line.\n"
         "Only if the results contain upcoming or unconfirmed items, add a separate Expected: section (announced or scheduled, not yet happened). Only if you add your own reasoning, add a separate Prediction: section and say it is not confirmed. Skip empty sections.\n"
         "End with Sources: followed by 1 to 3 URLs from the search results that you actually used, one per line.\n"
-        "Never invent URLs. If results are weak or conflicting, say so. "
+        "Never invent URLs. If results are weak, few, off-topic or from low-quality sources (social media posts, classifieds, forums), say plainly that you found limited reliable results; never claim that nothing else happened. Write the whole answer in the user's own language and style following the language rules above (Tanglish in English letters if the user wrote Tanglish); you may keep the labels Today's points: and Sources: as they are. "
         "Put the follow-up question after the Sources section as the last line.\n"
     )
 
