@@ -2390,7 +2390,44 @@ _RAG_STOP = {
 }
 
 
+_DOCREF_RE = re.compile(r"\bdoc(?!tor|ker)\w*|\b(?:pdf|files?|resume|cv|attach\w*|upload\w*)\b|డాక్యుమెంట్|ఫైల్|పత్రం", re.I)
+
+
 def build_files_block(user_id, message):
+    found = _build_files_block_search(user_id, message)
+    if found or not user_id or os.environ.get("FILES_RAG", "1") == "0":
+        return found
+    if not _DOCREF_RE.search(message or ""):
+        return ""
+    row = None
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT filename, extracted_text FROM user_files "
+            "WHERE user_id = ? AND extracted_text IS NOT NULL "
+            "ORDER BY created_at DESC, id DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+    except Exception as e:
+        print("FILES FALLBACK ERROR:", repr(e))
+    finally:
+        conn.close()
+    if row and (row["extracted_text"] or "").strip():
+        text = " ".join(row["extracted_text"].split())[:6000]
+        return (
+            "THE USER IS ASKING ABOUT THEIR MOST RECENTLY UPLOADED FILE: " + row["filename"] + ". "
+            "Its text (possibly shortened) is below. Base your answer ONLY on this text: explain or summarize "
+            "what it really says, mention the file name, and never invent details that are not in it.\n\n"
+            + text + "\n"
+        )
+    return (
+        "NOTE: The user mentions a document or file, but no uploaded file text is available. "
+        "If they are asking about a file they uploaded, say honestly that you cannot see its text "
+        "and ask them to upload it in My Files; never invent its contents. Otherwise ignore this note.\n"
+    )
+
+
+def _build_files_block_search(user_id, message):
     if os.environ.get("FILES_RAG", "1") == "0" or not user_id:
         return ""
     words = re.findall(r"[A-Za-z0-9\u0c00-\u0c7f]{3,}", (message or "").lower())
