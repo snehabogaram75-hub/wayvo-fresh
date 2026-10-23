@@ -383,6 +383,7 @@ class WayvoHome extends StatefulWidget {
 class _WayvoHomeState extends State<WayvoHome>
     with SingleTickerProviderStateMixin {
   final messageController = TextEditingController();
+  dynamic pendingDoc;
 
   final ScrollController scrollController = ScrollController();
 
@@ -1117,6 +1118,10 @@ class _WayvoHomeState extends State<WayvoHome>
   // =========================
 
   Future<void> sendMessage() async {
+    if (pendingDoc != null) {
+      await sendPendingDocument(messageController.text);
+      return;
+    }
     final message = messageController.text.trim();
 
     if (message.isEmpty || sending) return;
@@ -1457,9 +1462,24 @@ class _WayvoHomeState extends State<WayvoHome>
     );
 
     if (pickedFile == null) return;
+    setState(() => pendingDoc = pickedFile);
+    inputFocus.requestFocus();
+  }
 
+  Future<void> sendPendingDocument(String question) async {
+    final pickedFile = pendingDoc;
+    if (pickedFile == null || sending) return;
+    final q = question.trim();
+    final ask = q.isEmpty
+        ? 'Please analyze this document and summarize the important information.'
+        : q;
     setState(() {
-      messages.add({'role': 'You', 'content': 'Document: ${pickedFile.name}'});
+      pendingDoc = null;
+      messageController.clear();
+      messages.add({
+        'role': 'You',
+        'content': 'Document: ${pickedFile.name}' + (q.isEmpty ? '' : '\n' + q),
+      });
       sending = true;
     });
 
@@ -1470,7 +1490,7 @@ class _WayvoHomeState extends State<WayvoHome>
 
       final formData = FormData.fromMap({
         'file': MultipartFile.fromBytes(bytes, filename: pickedFile.name),
-        'message': 'Please analyze this document and summarize the important information.',
+        'message': ask,
         'chat_id': (currentChatId ?? '').toString(),
       });
 
@@ -3136,7 +3156,33 @@ class _WayvoHomeState extends State<WayvoHome>
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Colors.grey.shade300),
               ),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (pendingDoc != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 6, 0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.description_outlined, size: 18, color: Colors.black54),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              pendingDoc.name.toString(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () => setState(() => pendingDoc = null),
+                          ),
+                        ],
+                      ),
+                    ),
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
@@ -3180,13 +3226,15 @@ class _WayvoHomeState extends State<WayvoHome>
                   ),
                 ],
               ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 8),
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: messageController,
             builder: (context, value, _) {
-              final hasText = value.text.trim().isNotEmpty;
+              final hasText = value.text.trim().isNotEmpty || pendingDoc != null;
               return Container(
                 decoration: const BoxDecoration(
                   color: Color(0xFF17152A),
