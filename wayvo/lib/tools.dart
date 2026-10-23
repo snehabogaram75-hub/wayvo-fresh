@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'main.dart' show dio, AuthScreen;
+import 'img_save.dart';
+import 'package:share_plus/share_plus.dart';
 
 String _errText(Object e, String fallback) {
   if (e is DioException) {
@@ -220,6 +222,101 @@ class _CodeWorkspaceState extends State<CodeWorkspace> {
 
 // ---------------- IMAGE ----------------
 
+class _ImageViewer extends StatefulWidget {
+  final Uint8List bytes;
+  final Future<void> Function() onDownload;
+  final Future<void> Function() onShare;
+  const _ImageViewer({
+    required this.bytes,
+    required this.onDownload,
+    required this.onShare,
+  });
+
+  @override
+  State<_ImageViewer> createState() => _ImageViewerState();
+}
+
+class _ImageViewerState extends State<_ImageViewer> {
+  final TransformationController tc = TransformationController();
+
+  void _setScale(double v) {
+    final sc = v.clamp(1.0, 6.0).toDouble();
+    final sz = context.size ?? const Size(400, 600);
+    final cx = sz.width / 2;
+    final cy = sz.height / 2;
+    tc.value = Matrix4.translationValues(-cx * (sc - 1), -cy * (sc - 1), 0) *
+        Matrix4.diagonal3Values(sc, sc, 1);
+  }
+
+  double get _cur => tc.value.getMaxScaleOnAxis();
+
+  @override
+  void dispose() {
+    tc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Image'),
+        actions: [
+          IconButton(
+            tooltip: 'Download',
+            icon: const Icon(Icons.download),
+            onPressed: widget.onDownload,
+          ),
+          IconButton(
+            tooltip: 'Share',
+            icon: const Icon(Icons.share),
+            onPressed: widget.onShare,
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onDoubleTap: () => _setScale(_cur > 1.05 ? 1.0 : 2.5),
+              child: InteractiveViewer(
+                transformationController: tc,
+                minScale: 1,
+                maxScale: 6,
+                child: Center(child: Image.memory(widget.bytes, fit: BoxFit.contain)),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 24,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'zoom_out',
+                  onPressed: () => _setScale(_cur / 1.5),
+                  child: const Icon(Icons.zoom_out),
+                ),
+                const SizedBox(width: 16),
+                FloatingActionButton.small(
+                  heroTag: 'zoom_in',
+                  onPressed: () => _setScale(_cur * 1.5),
+                  child: const Icon(Icons.zoom_in),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ImageWorkspace extends StatefulWidget {
   const ImageWorkspace({super.key});
 
@@ -264,6 +361,53 @@ class _ImageWorkspaceState extends State<ImageWorkspace> {
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> _download() async {
+    if (image == null) return;
+    try {
+      final msg = await saveImage(
+        image!,
+        'wayvo-image-${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not save the image.')),
+      );
+    }
+  }
+
+  Future<void> _share() async {
+    if (image == null) return;
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'Made with WAYVO',
+          files: [
+            XFile.fromData(image!, mimeType: 'image/jpeg', name: 'wayvo-image.jpg'),
+          ],
+        ),
+      );
+    } catch (_) {
+      await _download();
+    }
+  }
+
+  void _openViewer() {
+    if (image == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _ImageViewer(
+          bytes: image!,
+          onDownload: _download,
+          onShare: _share,
+        ),
+      ),
+    );
   }
 
   @override
@@ -325,7 +469,34 @@ class _ImageWorkspaceState extends State<ImageWorkspace> {
             padding: const EdgeInsets.only(top: 18),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 360), child: Image.memory(image!, fit: BoxFit.contain))),
+              child: GestureDetector(onTap: _openViewer, child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 360), child: Image.memory(image!, fit: BoxFit.contain)))),
+            ),
+          ),
+        if (image != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Center(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _openViewer,
+                    icon: const Icon(Icons.zoom_in),
+                    label: const Text('Zoom'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _download,
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _share,
+                    icon: const Icon(Icons.share),
+                    label: const Text('Share'),
+                  ),
+                ],
+              ),
             ),
           ),
         const SizedBox(height: 24),
