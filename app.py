@@ -1814,6 +1814,7 @@ def tools_image():
     if len(recent) >= 15:
         return jsonify({"success": False, "message": "Image limit reached (15 per hour). Try again later."}), 429
     r = None
+    _errs = []
     _pk = os.environ.get("POLLINATIONS_KEY", "")
     _q = urllib.parse.quote(prompt, safe="")
     for _base, _tmo in (("https://gen.pollinations.ai/image/", 14), ("https://image.pollinations.ai/prompt/", 10)):
@@ -1831,11 +1832,11 @@ def tools_image():
             if _r.status_code == 200 and _ct.startswith("image/") and len(_r.content) > 1000:
                 r = _r
                 break
-            print("IMAGE TOOL BAD RESPONSE:", _base, _r.status_code, _ct, _r.content[:200])
+            print("IMAGE TOOL BAD RESPONSE:", _base, _r.status_code, _ct, _r.content[:200], flush=True); _errs.append(_base.split("//")[1].split(".")[0] + ": " + str(_r.status_code) + " " + _ct[:30] + " " + _r.text[:80].replace("\n", " "))
         except Exception as e:
-            print("IMAGE TOOL ERROR:", _base, repr(e))
+            print("IMAGE TOOL ERROR:", _base, repr(e), flush=True); _errs.append(_base.split("//")[1].split(".")[0] + ": " + repr(e)[:120])
     if r is None:
-        return jsonify({"success": False, "message": "Image service is busy or not reachable. Try again in a minute."}), 502
+        return jsonify({"success": False, "message": "Image service is busy or not reachable. Try again in a minute. [debug: " + " | ".join(_errs)[:300] + "]"}), 502
     try:
         from PIL import Image, ImageDraw, ImageFont
         import io as _io
