@@ -1813,17 +1813,29 @@ def tools_image():
     recent = [t for t in _IMG_LIMIT.get(uid, []) if now - t < 3600]
     if len(recent) >= 15:
         return jsonify({"success": False, "message": "Image limit reached (15 per hour). Try again later."}), 429
-    try:
-        url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt, safe="")
-        r = requests.get(
-            url,
-            params={"width": 1024, "height": 1024, "model": "flux", "nologo": "true", "seed": random.randint(1, 999999)},
-            headers={"User-Agent": "WAYVO/1.0"},
-            timeout=25,
-        )
-    except Exception as e:
-        print("IMAGE TOOL ERROR:", repr(e))
-        return jsonify({"success": False, "message": "Image service is not reachable. Try again in a minute."}), 502
+    r = None
+    _pk = os.environ.get("POLLINATIONS_KEY", "")
+    _q = urllib.parse.quote(prompt, safe="")
+    for _base, _tmo in (("https://gen.pollinations.ai/image/", 14), ("https://image.pollinations.ai/prompt/", 10)):
+        try:
+            _h = {"User-Agent": "WAYVO/1.0"}
+            if _pk and "gen." in _base:
+                _h["Authorization"] = "Bearer " + _pk
+            _r = requests.get(
+                _base + _q,
+                params={"width": 1024, "height": 1024, "model": "flux", "nologo": "true", "seed": random.randint(1, 999999)},
+                headers=_h,
+                timeout=_tmo,
+            )
+            _ct = _r.headers.get("Content-Type", "")
+            if _r.status_code == 200 and _ct.startswith("image/") and len(_r.content) > 1000:
+                r = _r
+                break
+            print("IMAGE TOOL BAD RESPONSE:", _base, _r.status_code, _ct, _r.content[:200])
+        except Exception as e:
+            print("IMAGE TOOL ERROR:", _base, repr(e))
+    if r is None:
+        return jsonify({"success": False, "message": "Image service is busy or not reachable. Try again in a minute."}), 502
     ctype = r.headers.get("Content-Type", "")
     if r.status_code != 200 or not ctype.startswith("image/") or len(r.content) < 1000:
         return jsonify({"success": False, "message": "Image service is busy. Try again in a minute."}), 502
