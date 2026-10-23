@@ -325,7 +325,7 @@ class _ImageWorkspaceState extends State<ImageWorkspace> {
             padding: const EdgeInsets.only(top: 18),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Image.memory(image!, fit: BoxFit.contain),
+              child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 360), child: Image.memory(image!, fit: BoxFit.contain))),
             ),
           ),
         const SizedBox(height: 24),
