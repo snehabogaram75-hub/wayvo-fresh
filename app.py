@@ -1325,13 +1325,19 @@ def plant_ask():
             + lang_rule + " Plain text only, no markdown symbols like * or #."
         )
         user = "QUESTION: " + question + "\n\nDOCUMENT EXCERPTS:\n\n" + "\n\n".join(parts)
-        try:
-            reply = _groq_text(system, user, 3500, 0.2)
-        except Exception as e:
-            print("PLANT ASK ERROR:", repr(e))
-            return jsonify({"success": False, "message": "Could not answer right now. Please try again."}), 500
+        reply = ""
+        _perr = ""
+        for _try in range(2):
+            try:
+                reply = _groq_text(system, user, 3500 if _try == 0 else 6000, 0.2)
+                if reply:
+                    break
+                _perr = "empty reply"
+            except Exception as e:
+                print("PLANT ASK ERROR:", repr(e), flush=True)
+                _perr = type(e).__name__ + ": " + str(e)[:160]
         if not reply:
-            return jsonify({"success": False, "message": "Could not answer right now. Please try again."}), 500
+            return jsonify({"success": False, "message": "Could not answer right now. Please try again. [debug: " + _perr + "]"}), 500
     chat_id = _save_gen_chat(session["user_id"], "Plant: " + question, question, reply)
     return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
 
