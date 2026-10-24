@@ -384,6 +384,7 @@ class _WayvoHomeState extends State<WayvoHome>
     with SingleTickerProviderStateMixin {
   final messageController = TextEditingController();
   dynamic pendingDoc;
+  Map<String, dynamic>? pendingOneTime;
 
   final ScrollController scrollController = ScrollController();
 
@@ -1120,6 +1121,21 @@ class _WayvoHomeState extends State<WayvoHome>
   Future<void> sendMessage() async {
     if (pendingDoc != null) {
       await sendPendingDocument(messageController.text);
+      return;
+    }
+    if (pendingOneTime != null) {
+      final p = pendingOneTime!;
+      final q = messageController.text.trim();
+      setState(() {
+        pendingOneTime = null;
+        messageController.clear();
+      });
+      await createOneTime(
+        'image',
+        text: q.isEmpty ? 'What is in this photo?' : q,
+        bytes: p['bytes'] as List<int>,
+        filename: p['name'].toString(),
+      );
       return;
     }
     final message = messageController.text.trim();
@@ -2328,11 +2344,9 @@ class _WayvoHomeState extends State<WayvoHome>
         maxWidth: 1600,
       );
       if (x == null) return;
-      await createOneTime(
-        'image',
-        bytes: await x.readAsBytes(),
-        filename: x.name,
-      );
+      final pb = await x.readAsBytes();
+      setState(() => pendingOneTime = {'bytes': pb, 'name': x.name});
+      inputFocus.requestFocus();
     } else {
       final f = await FilePicker.pickFile(type: FileType.any);
       if (f == null) return;
@@ -3165,6 +3179,29 @@ class _WayvoHomeState extends State<WayvoHome>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (pendingOneTime != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 6, 0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lock_outline, size: 18, color: Colors.black54),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'One-time photo: ' + pendingOneTime!['name'].toString(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () => setState(() => pendingOneTime = null),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (pendingDoc != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(14, 8, 6, 0),
@@ -3240,7 +3277,7 @@ class _WayvoHomeState extends State<WayvoHome>
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: messageController,
             builder: (context, value, _) {
-              final hasText = value.text.trim().isNotEmpty || pendingDoc != null;
+              final hasText = value.text.trim().isNotEmpty || pendingDoc != null || pendingOneTime != null;
               return Container(
                 decoration: const BoxDecoration(
                   color: Color(0xFF17152A),
