@@ -1761,7 +1761,7 @@ NL = chr(10)
 _IMG_LIMIT = {}
 
 
-def _groq_text(prompt, max_toks=1800, temp=0.2):
+def _groq_prompt_text(prompt, max_toks=1800, temp=0.2):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     response = client.chat.completions.create(
         model="openai/gpt-oss-20b",
@@ -1796,7 +1796,7 @@ def tools_code():
     if not prompt:
         return jsonify({"success": False, "message": "Unknown action."}), 400
     try:
-        reply = _groq_text(prompt)
+        reply = _groq_prompt_text(prompt)
     except Exception as e:
         print("CODE TOOL ERROR:", repr(e))
         return jsonify({"success": False, "message": "Could not process the code. Try again."}), 500
