@@ -74,6 +74,26 @@ def extract_document_text(file):
             file.stream.seek(0)
         except Exception:
             pass
+        if _raw[:2] == b"PK":
+            import io as _io3
+            try:
+                if ext == ".ppt":
+                    _prs = Presentation(_io3.BytesIO(_raw))
+                    _pp = []
+                    for _n, _sl in enumerate(_prs.slides, start=1):
+                        _pp.append("Slide: " + str(_n))
+                        for _sh in _sl.shapes:
+                            if hasattr(_sh, "text") and _sh.text.strip():
+                                _pp.append(_sh.text)
+                    if len(_pp) > 1:
+                        return "\n".join(_pp)
+                elif ext == ".doc":
+                    _d3 = Document(_io3.BytesIO(_raw))
+                    _t3 = "\n".join(_p.text for _p in _d3.paragraphs if _p.text.strip())
+                    if _t3.strip():
+                        return _t3
+            except Exception as _e3:
+                print("OLDFMT ZIP READ ERROR:", repr(_e3), flush=True)
         _runs = _lre.findall(r"[ -~]{8,}", _raw.decode("latin-1", errors="ignore")) + _lre.findall(r"[ -~]{8,}", _raw.decode("utf-16le", errors="ignore"))
         _seen = set()
         _out = []
@@ -83,6 +103,8 @@ def extract_document_text(file):
                 _seen.add(_r)
                 _out.append(_r)
         _txt = "\n".join(_out)[:60000]
+        if _lre.search(r"slideMaster|slideLayout|<\?xml|theme1\.xml|WAVEfmt|\[Content_Types\]", _txt):
+            raise ValueError("Could not read this old-format file. Please save it as PDF or PPTX/DOCX and try again.")
         if len(_txt) < 40:
             raise ValueError("Could not read this old-format file. Please save it as PDF or DOCX and try again.")
         return "(Text recovered from an old-format file, so it may be incomplete or messy.)\n" + _txt
