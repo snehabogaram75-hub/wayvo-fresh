@@ -1337,7 +1337,7 @@ def plant_ask():
                 print("PLANT ASK ERROR:", repr(e), flush=True)
                 _perr = type(e).__name__ + ": " + str(e)[:160]
         if not reply:
-            return jsonify({"success": False, "message": "Could not answer right now. Please try again. [debug: " + _perr + "]"}), 500
+            return jsonify({"success": False, "message": "Could not answer right now. Please try again."}), 500
     chat_id = _save_gen_chat(session["user_id"], "Plant: " + question, question, reply)
     return jsonify({"success": True, "chat_id": chat_id, "reply": reply})
 
@@ -1842,7 +1842,7 @@ def tools_image():
         except Exception as e:
             print("IMAGE TOOL ERROR:", _base, repr(e), flush=True); _errs.append(_base.split("//")[1].split(".")[0] + ": " + repr(e)[:120])
     if r is None:
-        return jsonify({"success": False, "message": "Image service is busy or not reachable. Try again in a minute. [debug: " + ("key=" + (str(len(_pk)) if _pk else "MISSING") + " | " + " | ".join(_errs))[:360] + "]"}), 502
+        return jsonify({"success": False, "message": "Image service is busy or not reachable. Try again in a minute."}), 502
     try:
         from PIL import Image, ImageDraw, ImageFont
         import io as _io
