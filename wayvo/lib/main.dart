@@ -1458,6 +1458,12 @@ class _WayvoHomeState extends State<WayvoHome>
         'json',
         'md',
         'xml',
+        'rtf',
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'gif',
       ],
     );
 

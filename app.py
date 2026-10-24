@@ -57,7 +57,49 @@ def extract_document_text(file):
     if ext in [".txt", ".md", ".json", ".xml"]:
         return file.read().decode("utf-8", errors="replace")
 
-    raise ValueError("Unsupported document type.")
+    if ext in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"):
+        _blob = file.stream.read()
+        try:
+            file.stream.seek(0)
+        except Exception:
+            pass
+        _mime = {".png": "image/png", ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp"}.get(ext, "image/jpeg")
+        _ans, _det = analyze_image_short(_blob, _mime, "Transcribe all visible text exactly and describe this image in detail.")
+        return (_ans + "\n" + _det).strip()
+
+    if ext in (".doc", ".ppt", ".rtf"):
+        import re as _lre
+        _raw = file.stream.read()
+        try:
+            file.stream.seek(0)
+        except Exception:
+            pass
+        _runs = _lre.findall(r"[ -~]{8,}", _raw.decode("latin-1", errors="ignore")) + _lre.findall(r"[ -~]{8,}", _raw.decode("utf-16le", errors="ignore"))
+        _seen = set()
+        _out = []
+        for _r in _runs:
+            _r = _r.strip()
+            if _r and _r not in _seen:
+                _seen.add(_r)
+                _out.append(_r)
+        _txt = "\n".join(_out)[:60000]
+        if len(_txt) < 40:
+            raise ValueError("Could not read this old-format file. Please save it as PDF or DOCX and try again.")
+        return "(Text recovered from an old-format file, so it may be incomplete or messy.)\n" + _txt
+
+    _raw2 = file.stream.read()
+    try:
+        file.stream.seek(0)
+    except Exception:
+        pass
+    try:
+        _t2 = _raw2.decode("utf-8")
+    except Exception:
+        _t2 = ""
+    _s2 = _t2[:4000]
+    if _s2 and sum(1 for _c in _s2 if _c.isprintable() or _c in "\n\r\t") / len(_s2) > 0.95:
+        return _t2
+    raise ValueError("Unsupported document type. Please save it as PDF or DOCX and try again.")
 
 app.secret_key = os.environ.get("SECRET_KEY", "wayvo-secret-key")
 app.config["SESSION_COOKIE_SAMESITE"] = "None"

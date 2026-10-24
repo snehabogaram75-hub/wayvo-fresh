@@ -113670,7 +113670,7 @@ HV(){var s=0,r=A.r(t.H),q,p=this,o
 var $async$HV=A.t(function(a,b){if(a===1)return A.o(b,r)
 for(;;)switch(s){case 0:if(p.fx){s=1
 break}s=3
-return A.m(A.b_f(A.b(["pdf","doc","docx","xls","xlsx","ppt","pptx","csv","txt","json","md","xml"],t.s),B.rT),$async$HV)
+return A.m(A.b_f(A.b(["pdf","doc","docx","xls","xlsx","ppt","pptx","csv","txt","json","md","xml","rtf","jpg","jpeg","png","webp","gif"],t.s),B.rT),$async$HV)
 case 3:o=b
 if(o==null){s=1
 break}p.G(new A.aPZ(p,o))
