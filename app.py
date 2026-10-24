@@ -525,6 +525,17 @@ def analyze_image_short(blob, mime, question=""):
         "words, for later follow-up questions. Do not mention this "
         "instruction."
     )
+    try:
+        from PIL import Image as _PI
+        import io as _io
+        _im = _PI.open(_io.BytesIO(blob)).convert("RGB")
+        _im.thumbnail((1280, 1280))
+        _bf = _io.BytesIO()
+        _im.save(_bf, "JPEG", quality=85)
+        blob = _bf.getvalue()
+        mime = "image/jpeg"
+    except Exception as _e:
+        print("ONETIME RESIZE SKIP:", repr(_e), flush=True)
     b64 = base64.b64encode(blob).decode("utf-8")
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     response = client.chat.completions.create(
@@ -542,9 +553,11 @@ def analyze_image_short(blob, mime, question=""):
             ]
         }],
         temperature=0.4,
-        max_completion_tokens=max_toks
+        max_completion_tokens=max(max_toks, 2500)
     )
-    raw = response.choices[0].message.content.strip()
+    raw = (response.choices[0].message.content or "").strip()
+    if not raw:
+        raise ValueError("empty vision reply")
     answer, details = raw, ""
     if "DETAILS:" in raw:
         answer, details = raw.split("DETAILS:", 1)
@@ -626,8 +639,8 @@ def create_onetime():
         try:
             reply, details = analyze_image_short(blob, mime, text)
         except Exception as e:
-            print("ONETIME VISION ERROR:", repr(e))
-            reply, details = None, ""
+            print("ONETIME VISION ERROR:", repr(e), flush=True)
+            reply, details = "I could not read this photo right now. Please try again. [debug: " + type(e).__name__ + ": " + str(e)[:160] + "]", ""
         if reply:
             conn.execute(
                 "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
