@@ -16,3 +16,4 @@ pandas
 
 python-pptx
 pillow
+olefile

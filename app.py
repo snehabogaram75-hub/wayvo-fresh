@@ -20,6 +20,49 @@ import pandas as pd
 app = Flask(__name__)
 
 
+def _read_old_ppt_text(raw):
+    import io as _io
+    import struct as _st
+    import re as _re
+    import olefile
+    ole = olefile.OleFileIO(_io.BytesIO(raw))
+    try:
+        if not ole.exists("PowerPoint Document"):
+            return ""
+        data = ole.openstream("PowerPoint Document").read()
+    finally:
+        ole.close()
+    out = []
+
+    def walk(start, end, depth=0):
+        pos = start
+        while pos + 8 <= end:
+            ver_inst, rtype, rlen = _st.unpack_from("<HHI", data, pos)
+            body = pos + 8
+            stop = body + rlen
+            if stop > end:
+                break
+            if (ver_inst & 0x000F) == 0x000F and depth < 12:
+                walk(body, stop, depth + 1)
+            elif rtype == 4000:
+                out.append(data[body:stop].decode("utf-16le", errors="ignore"))
+            elif rtype == 4008:
+                out.append(data[body:stop].decode("cp1252", errors="ignore"))
+            pos = stop
+
+    walk(0, len(data))
+    seen, lines = set(), []
+    for t in out:
+        for ln in t.replace("\x0b", "\n").replace("\r", "\n").split("\n"):
+            ln = "".join(ch for ch in ln if ch.isprintable()).strip()
+            if _re.match(r"^(\*|(Second|Third|Fourth|Fifth|Sixth|Seventh) (level|Outline Level)|Click to edit.*)$", ln):
+                continue
+            if ln and ln not in seen:
+                seen.add(ln)
+                lines.append(ln)
+    return "\n".join(lines)
+
+
 def extract_document_text(file):
     filename = (file.filename or "").lower()
     ext = os.path.splitext(filename)[1]
@@ -94,6 +137,13 @@ def extract_document_text(file):
                         return _t3
             except Exception as _e3:
                 print("OLDFMT ZIP READ ERROR:", repr(_e3), flush=True)
+        if _raw[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" and ext == ".ppt":
+            try:
+                _pt = _read_old_ppt_text(_raw)
+                if len(_pt.strip()) >= 20:
+                    return "(Text read from an old .ppt file; tables, SmartArt and images are not included.)\n" + _pt
+            except Exception as _e4:
+                print("OLD PPT READ ERROR:", repr(_e4), flush=True)
         _runs = _lre.findall(r"[ -~]{8,}", _raw.decode("latin-1", errors="ignore")) + _lre.findall(r"[ -~]{8,}", _raw.decode("utf-16le", errors="ignore"))
         _seen = set()
         _out = []
