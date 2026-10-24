@@ -677,6 +677,35 @@ def create_onetime():
     )
 
     reply = None
+    if kind == "file" and blob:
+        try:
+            import io as _io2
+
+            class _F2:
+                pass
+
+            _f2 = _F2()
+            _f2.filename = filename
+            _f2.stream = _io2.BytesIO(blob)
+            _f2.read = _f2.stream.read
+            _doc = (extract_document_text(_f2) or "").strip()
+            if not _doc:
+                raise ValueError("no readable text in this file")
+            _q = (text or "").strip() or "Explain what this file says in simple words."
+            reply = _groq_text(
+                "You are WAYVO. Answer the user's question using ONLY the file text given. Be clear and short unless asked for detail. Never invent facts that are not in the file. If the answer is not in the file, say so. Reply in the same language style as the question (Tanglish in English letters if the question is Tanglish).",
+                "QUESTION: " + _q + "\n\nFILE TEXT:\n" + _doc[:14000],
+                2500, 0.3,
+            )
+            if not (reply or "").strip():
+                raise ValueError("empty answer")
+        except Exception as e:
+            print("ONETIME FILE ERROR:", repr(e), flush=True)
+            reply = "I could not read this file right now. Please try another file or try again. [debug: " + type(e).__name__ + ": " + str(e)[:160] + "]"
+        conn.execute(
+            "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+            (chat_id, "WAYVO", reply)
+        )
     if kind == "image" and blob:
         try:
             reply, details = analyze_image_short(blob, mime, text)
