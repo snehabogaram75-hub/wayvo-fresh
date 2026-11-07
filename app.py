@@ -873,6 +873,135 @@ def view_onetime(item_id):
 MAX_FILE_BYTES = 10 * 1024 * 1024
 
 
+_MONGO = {"col": None}
+_BACKFILLING = set()
+
+
+def _mongo_col():
+    if _MONGO["col"] is not None:
+        return _MONGO["col"]
+    uri = os.environ.get("MONGODB_URI", "").strip()
+    if not uri or not os.environ.get("GEMINI_API_KEY", "").strip():
+        return None
+    try:
+        from pymongo import MongoClient
+        _cl = MongoClient(uri, serverSelectionTimeoutMS=8000)
+        _MONGO["col"] = _cl["wayvo"]["chunks"]
+    except Exception as e:
+        print("MONGO INIT ERROR:", repr(e), flush=True)
+        return None
+    return _MONGO["col"]
+
+
+def _gem_embed(texts, task):
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    out = []
+    for i in range(0, len(texts), 50):
+        batch = texts[i:i + 50]
+        r = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents",
+            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+            json={"requests": [{"model": "models/gemini-embedding-001", "content": {"parts": [{"text": t}]}, "taskType": task, "outputDimensionality": 768} for t in batch]},
+            timeout=60,
+        )
+        if r.status_code != 200:
+            raise RuntimeError("embed " + str(r.status_code) + " " + r.text[:120])
+        out.extend(e["values"] for e in r.json()["embeddings"])
+    return out
+
+
+def _index_file_chunks(user_id, file_id, filename, text):
+    col = _mongo_col()
+    if col is None or not (text or "").strip():
+        return
+    t = " ".join(text.split())
+    chunks = [t[i:i + 1000] for i in range(0, min(len(t), 150000), 900)][:150]
+    vecs = _gem_embed(chunks, "RETRIEVAL_DOCUMENT")
+    col.delete_many({"user_id": user_id, "file_id": file_id})
+    col.insert_many([
+        {"user_id": user_id, "file_id": file_id, "filename": filename, "part": n + 1, "parts": len(chunks), "text": c, "embedding": v}
+        for n, (c, v) in enumerate(zip(chunks, vecs))
+    ])
+
+
+def _index_file_async(user_id, file_id, filename, text):
+    import threading
+
+    def run():
+        try:
+            _index_file_chunks(user_id, file_id, filename, text)
+        except Exception as e:
+            print("INDEX ERROR:", repr(e), flush=True)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _backfill_user(user_id):
+    import threading
+    if user_id in _BACKFILLING:
+        return
+    _BACKFILLING.add(user_id)
+
+    def run():
+        try:
+            conn = get_db()
+            rows = conn.execute(
+                "SELECT id, filename, extracted_text FROM user_files WHERE user_id = ? AND extracted_text IS NOT NULL ORDER BY id DESC LIMIT 20",
+                (user_id,),
+            ).fetchall()
+            conn.close()
+            for r in rows:
+                if (r["extracted_text"] or "").strip():
+                    _index_file_chunks(user_id, r["id"], r["filename"], r["extracted_text"])
+        except Exception as e:
+            print("BACKFILL ERROR:", repr(e), flush=True)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def vector_files_block(user_id, message):
+    if os.environ.get("FILES_RAG", "1") == "0" or not user_id:
+        return ""
+    col = _mongo_col()
+    msg = (message or "").strip()
+    if col is None or len(msg) < 6:
+        return ""
+    if col.count_documents({"user_id": user_id}, limit=1) == 0:
+        _backfill_user(user_id)
+        return ""
+    qv = _gem_embed([msg[:2000]], "RETRIEVAL_QUERY")[0]
+    hits = list(col.aggregate([
+        {"$vectorSearch": {"index": "chunks_vec", "path": "embedding", "queryVector": qv, "numCandidates": 100, "limit": 6, "filter": {"user_id": user_id}}},
+        {"$project": {"_id": 0, "file_id": 1, "filename": 1, "part": 1, "parts": 1, "text": 1, "score": {"$meta": "vectorSearchScore"}}},
+    ]))
+    min_score = float(os.environ.get("VEC_MIN_SCORE", "0.82"))
+    hits = [h for h in hits if h.get("score", 0) >= min_score]
+    if not hits:
+        return ""
+    ids = sorted({h["file_id"] for h in hits})
+    conn = get_db()
+    rows = conn.execute("SELECT id FROM user_files WHERE user_id = ? AND id = ANY(?)", (user_id, ids)).fetchall()
+    conn.close()
+    alive = {r["id"] for r in rows}
+    parts, used = [], 0
+    for h in hits:
+        if h["file_id"] not in alive:
+            continue
+        if used + len(h["text"]) > 4500:
+            break
+        parts.append("[From file: " + h["filename"] + " | part " + str(h["part"]) + " of " + str(h["parts"]) + "]\n" + h["text"])
+        used += len(h["text"])
+    if not parts:
+        return ""
+    print("VECTOR HITS:", len(parts), flush=True)
+    return (
+        "USER'S OWN UPLOADED FILES (semantic search matches from MongoDB vector search). Use them only if they help "
+        "answer the question, and mention the file name when you use them. "
+        "If they are not relevant, ignore them completely.\n\n"
+        + "\n\n".join(parts) + "\n"
+    )
+
+
 def _save_user_file(user_id, filename, mime, raw, text, summary):
     import psycopg2
     if not raw or len(raw) > MAX_FILE_BYTES:
@@ -894,6 +1023,11 @@ def _save_user_file(user_id, filename, mime, raw, text, summary):
     ).fetchone()
     conn.commit()
     conn.close()
+    try:
+        if (text or "").strip():
+            _index_file_async(user_id, row["id"], (filename or "file")[:200], text)
+    except Exception as _ie:
+        print("INDEX START ERROR:", repr(_ie), flush=True)
     return row["id"]
 
 
@@ -2691,7 +2825,13 @@ _DOCREF_RE = re.compile(r"\bdoc(?!tor|ker)\w*|\b(?:pdf|files?|resume|cv|attach\w
 
 
 def build_files_block(user_id, message):
-    found = _build_files_block_search(user_id, message)
+    found = ""
+    try:
+        found = vector_files_block(user_id, message)
+    except Exception as _ve:
+        print("VECTOR BLOCK ERROR:", repr(_ve), flush=True)
+    if not found:
+        found = _build_files_block_search(user_id, message)
     if found or not user_id or os.environ.get("FILES_RAG", "1") == "0":
         return found
     if not _DOCREF_RE.search(message or ""):

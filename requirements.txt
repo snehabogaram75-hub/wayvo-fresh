@@ -17,3 +17,5 @@ pandas
 python-pptx
 pillow
 olefile
+pymongo
+dnspython
