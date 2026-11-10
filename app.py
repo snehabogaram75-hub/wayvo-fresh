@@ -874,6 +874,13 @@ MAX_FILE_BYTES = 10 * 1024 * 1024
 
 
 _MONGO = {"col": None}
+
+
+def _vec_allowed(user_id):
+    ids = {x.strip() for x in os.environ.get("VEC_USER_IDS", "").split(",") if x.strip()}
+    return str(user_id) in ids
+
+
 _BACKFILLING = set()
 
 
@@ -925,6 +932,8 @@ def _index_file_chunks(user_id, file_id, filename, text):
 
 
 def _index_file_async(user_id, file_id, filename, text):
+    if not _vec_allowed(user_id):
+        return
     import threading
 
     def run():
@@ -937,6 +946,8 @@ def _index_file_async(user_id, file_id, filename, text):
 
 
 def _backfill_user(user_id):
+    if not _vec_allowed(user_id):
+        return
     import threading
     if user_id in _BACKFILLING:
         return
@@ -961,6 +972,8 @@ def _backfill_user(user_id):
 
 def vector_files_block(user_id, message):
     if os.environ.get("FILES_RAG", "1") == "0" or not user_id:
+        return ""
+    if not _vec_allowed(user_id):
         return ""
     col = _mongo_col()
     msg = (message or "").strip()
