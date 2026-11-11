@@ -3232,6 +3232,33 @@ def api_chat_stream():
     style = data.get("style") or "short"
     user_id = session["user_id"]
     mode = data.get("mode") if data.get("mode") in ("interview", "elder") else ""
+    if message == "/vecdebug":
+        _L = []
+        _L.append("user_id=" + str(user_id) + " | vector allowed=" + str(_vec_allowed(user_id)))
+        _L.append("VEC_USER_IDS=" + os.environ.get("VEC_USER_IDS", "(not set)") + " | VEC_MIN_SCORE=" + os.environ.get("VEC_MIN_SCORE", "(default 0.82)"))
+        _L.append("MONGODB_URI set=" + str(bool(os.environ.get("MONGODB_URI", "").strip())))
+        _gk = os.environ.get("GEMINI_API_KEY", "").strip()
+        _L.append("GEMINI key: prefix=" + (_gk[:4] or "(none)") + " length=" + str(len(_gk)))
+        _L.append("FILES_RAG=" + os.environ.get("FILES_RAG", "1"))
+        try:
+            _c = _mongo_col()
+            _L.append("Mongo connected=" + str(_c is not None))
+            if _c is not None:
+                _L.append("Mongo chunks for this user=" + str(_c.count_documents({"user_id": user_id})))
+        except Exception as _e:
+            _L.append("Mongo ERROR: " + type(_e).__name__ + " " + str(_e)[:160])
+        _q = "which part of the boiler loses efficiency most because of ash?"
+        try:
+            _r = vector_files_block(user_id, _q)
+            _L.append("vector_files_block: " + ("HIT, " + str(len(_r)) + " chars" if _r else "EMPTY"))
+        except Exception as _e:
+            _L.append("vector_files_block ERROR: " + type(_e).__name__ + " " + str(_e)[:200])
+        try:
+            _r2 = build_files_block(user_id, _q)
+            _L.append("build_files_block: " + ("HIT, " + str(len(_r2)) + " chars" if _r2 else "EMPTY"))
+        except Exception as _e:
+            _L.append("build_files_block ERROR: " + type(_e).__name__ + " " + str(_e)[:200])
+        return Response(_json.dumps({"done": True, "reply": "\n".join(_L)}) + "\n", mimetype="application/x-ndjson")
 
     conn = get_db()
     chat_id = session.get("chat_id")
