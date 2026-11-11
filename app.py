@@ -2812,6 +2812,39 @@ def public_shared_image(token):
     return Response(bytes(row["data"]), mimetype=row["mime"], headers={"Cache-Control": "public, max-age=86400"})
 
 
+@app.route("/api/vecstatus")
+def api_vecstatus():
+    if request.args.get("k") != "dbg-7391":
+        return jsonify({"ok": False}), 403
+    out = {"code": "vecstatus-1"}
+    out["VEC_USER_IDS"] = os.environ.get("VEC_USER_IDS", "(not set)")
+    out["VEC_MIN_SCORE"] = os.environ.get("VEC_MIN_SCORE", "(default 0.82)")
+    out["mongo_uri_set"] = bool(os.environ.get("MONGODB_URI", "").strip())
+    _gk = os.environ.get("GEMINI_API_KEY", "").strip()
+    out["gemini_prefix"] = _gk[:4] or "(none)"
+    out["gemini_len"] = len(_gk)
+    try:
+        _c = _mongo_col()
+        out["mongo_connected"] = _c is not None
+        if _c is not None:
+            out["total_chunks"] = _c.count_documents({})
+            qv = _gem_embed(["which part of the boiler loses efficiency most because of ash?"], "RETRIEVAL_QUERY")[0]
+            res = {}
+            for uid in [x.strip() for x in os.environ.get("VEC_USER_IDS", "").split(",") if x.strip()]:
+                try:
+                    h = list(_c.aggregate([
+                        {"$vectorSearch": {"index": "chunks_vec", "path": "embedding", "queryVector": qv, "numCandidates": 100, "limit": 1, "filter": {"user_id": int(uid)}}},
+                        {"$project": {"_id": 0, "filename": 1, "score": {"$meta": "vectorSearchScore"}}},
+                    ]))
+                    res[uid] = (str(round(h[0]["score"], 3)) + " " + h[0]["filename"][:30]) if h else "no chunks"
+                except Exception as e:
+                    res[uid] = "ERROR " + type(e).__name__ + " " + str(e)[:120]
+            out["vector_test_per_user"] = res
+    except Exception as e:
+        out["error"] = type(e).__name__ + " " + str(e)[:200]
+    return jsonify(out)
+
+
 @app.route("/api/health")
 def api_health():
     try:
