@@ -2838,13 +2838,29 @@ _DOCREF_RE = re.compile(r"\bdoc(?!tor|ker)\w*|\b(?:pdf|files?|resume|cv|attach\w
 
 
 def build_files_block(user_id, message):
+    _dbg_on = (message or "").lower().startswith("vecdbg ")
+    if _dbg_on:
+        message = message[7:]
     found = ""
+    _vdbg = ""
     try:
         found = vector_files_block(user_id, message)
+        if not found:
+            _vdbg = "vector search: no match"
     except Exception as _ve:
         print("VECTOR BLOCK ERROR:", repr(_ve), flush=True)
+        _vdbg = "vector search ERROR " + type(_ve).__name__ + ": " + str(_ve)[:150]
     if not found:
         found = _build_files_block_search(user_id, message)
+    if _dbg_on:
+        _gk = os.environ.get("GEMINI_API_KEY", "").strip()
+        _note = (
+            "DEBUG: start your reply with exactly this line in square brackets, then answer the question normally: ["
+            + "user_id=" + str(user_id) + " allowed=" + str(_vec_allowed(user_id))
+            + " mongo_uri_set=" + str(bool(os.environ.get("MONGODB_URI", "").strip()))
+            + " gemini_prefix=" + (_gk[:4] or "none") + " " + (_vdbg or "vector HIT") + "]\n\n"
+        )
+        return _note + (found or "")
     if found or not user_id or os.environ.get("FILES_RAG", "1") == "0":
         return found
     if not _DOCREF_RE.search(message or ""):
